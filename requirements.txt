@@ -1,0 +1,4 @@
+mlx-lm>=0.31.0
+pyyaml>=6.0
+rich>=13.0
+python-magic>=0.4.27

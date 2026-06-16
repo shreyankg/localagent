@@ -14,12 +14,13 @@ See [GUARDRAILS.md](GUARDRAILS.md) for the full safety architecture.
 
 - macOS with Apple Silicon (M1+)
 - Python 3.12+
-- MLX and mlx-lm (installed automatically)
+- MLX and mlx-lm (pulled in as dependencies via `pip install`)
 
 ## Installation
 
 ```bash
 git clone <repo-url> && cd localagent
+pip install -r requirements.txt
 pip install -e ".[dev]"
 ```
 
