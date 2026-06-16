@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -18,7 +16,6 @@ from localagent.config import (
     get_model_config,
     init_user_config,
     load_config,
-    skill_state_dir,
 )
 from localagent.core.engine import Engine
 from localagent.core.registry import get_registry, register_builtin_skills
@@ -140,39 +137,6 @@ def cmd_unschedule(args: argparse.Namespace) -> int:
     else:
         console.print(f"[yellow]No cron job found for '{args.skill}'[/yellow]")
     return 0
-
-
-def cmd_taxonomy(args: argparse.Namespace) -> int:
-    """Manage the learned taxonomy."""
-    state_dir = skill_state_dir(args.skill)
-    taxonomy_path = state_dir / "taxonomy.yaml"
-
-    if args.taxonomy_action == "show":
-        if not taxonomy_path.exists():
-            console.print("[yellow]No taxonomy learned yet.[/yellow]")
-            return 0
-        content = taxonomy_path.read_text()
-        console.print(f"[bold]Taxonomy[/bold] ({taxonomy_path}):\n")
-        console.print(content)
-        return 0
-
-    elif args.taxonomy_action == "edit":
-        if not taxonomy_path.exists():
-            console.print("[yellow]No taxonomy learned yet. Run the skill first.[/yellow]")
-            return 1
-        editor = os.environ.get("EDITOR", "nano")
-        subprocess.run([editor, str(taxonomy_path)])
-        return 0
-
-    elif args.taxonomy_action == "reset":
-        if taxonomy_path.exists():
-            taxonomy_path.unlink()
-            console.print("[green]Taxonomy reset. Next run will start fresh.[/green]")
-        else:
-            console.print("[yellow]No taxonomy to reset.[/yellow]")
-        return 0
-
-    return 1
 
 
 def cmd_config(args: argparse.Namespace) -> int:
@@ -314,15 +278,6 @@ def build_parser() -> argparse.ArgumentParser:
     unsched_parser = sub.add_parser("unschedule", help="Remove a cron trigger")
     unsched_parser.add_argument("skill", help="Skill name")
 
-    # taxonomy
-    tax_parser = sub.add_parser("taxonomy", help="Manage learned taxonomy")
-    tax_parser.add_argument("taxonomy_action", choices=["show", "edit", "reset"])
-    tax_parser.add_argument(
-        "--skill",
-        default="file-organizer",
-        help="Skill name (default: file-organizer)",
-    )
-
     # config
     sub.add_parser("config", help="Show current configuration")
 
@@ -372,7 +327,6 @@ def main() -> None:
         "undo": cmd_undo,
         "schedule": cmd_schedule,
         "unschedule": cmd_unschedule,
-        "taxonomy": cmd_taxonomy,
         "config": cmd_config,
         "list": cmd_list,
         "eval": cmd_eval,

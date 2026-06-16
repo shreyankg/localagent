@@ -35,18 +35,7 @@ localagent unschedule file-organizer
 
 The organizer does not use pre-defined categories. On first run, the LLM analyzes your actual files -- names, types, and content -- and generates categories that fit your scenario (e.g. "Receipts & Invoices", "Machine Learning Projects", "Meeting Notes"). On subsequent runs, it loads the existing taxonomy and extends it only when genuinely new file types appear.
 
-The taxonomy is saved to `~/.config/localagent/file-organizer/taxonomy.yaml` and is fully editable:
-
-```bash
-# View the learned taxonomy
-localagent taxonomy show
-
-# Edit in your $EDITOR
-localagent taxonomy edit
-
-# Start fresh
-localagent taxonomy reset
-```
+The taxonomy is saved to `~/.config/localagent/file-organizer/taxonomy.yaml` and is fully editable. Open it in any text editor to rename, merge, or remove categories. Delete the file to start fresh on the next run.
 
 You can lock any category by adding `user_locked: true` in the YAML -- the LLM will never rename or remove locked categories.
 
