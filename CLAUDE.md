@@ -15,8 +15,6 @@ localagent list            # Verify CLI works
 localagent eval file-organizer  # Run skill evals against default model
 ```
 
-Evals and tests are separate concerns. Evals run against a real LLM and are executed via `localagent eval`. Do not write pytest tests for eval scenarios — no test file should import from or assert against eval scenario classes. Eval correctness is validated by running the evals themselves.
-
 ## Architecture
 
 ```
@@ -122,10 +120,14 @@ The trigger system is in `core/triggers.py`. Currently only `CronTrigger` exists
 | `~/.local/share/localagent/logs/` | Undo journals |
 | `config/default.yaml` | Shipped defaults (merged under user config) |
 
-## README Guidelines
+## Design Principles
 
-- Keep the README generic and stable. Do not embed specific counts, scenario names, or other details that change frequently (e.g. "ships with 5 scenarios testing X, Y, Z"). Instead, link to the source file and let the code be the source of truth.
-- The same applies to test counts, model lists, and similar evolving details.
+These are lessons learned during development. Follow them for future changes.
+
+- **README stays generic.** Do not embed specific counts, scenario names, source file paths, or other details that change frequently (e.g. "ships with 5 scenarios testing X, Y, Z" or "See the [eval scenarios source](path/to/file)"). Let the code be the source of truth. Benchmark results with concrete numbers are fine since they represent a point-in-time snapshot.
+- **Evals are not tests.** Evals run against a real LLM via `localagent eval`. Do not write pytest tests for eval scenarios — no test file should import from or assert against eval scenario classes. When evals change (new scenarios, updated scoring), tests should not need updating.
+- **Skill-specific concepts stay out of the top-level CLI.** The CLI should only expose framework-level commands (`run`, `undo`, `schedule`, `config`, `eval`, `list`). If a concept belongs to a single skill (e.g. taxonomy is file-organizer's learned state), it should not be a top-level subcommand. Users can manage skill state files directly.
+- **Clean up dead imports.** When removing a feature, also remove any imports that become unused (`os`, `subprocess`, etc.).
 
 ## Code Style
 
