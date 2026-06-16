@@ -10,8 +10,9 @@ LocalAgent is a local AI agent framework powered by MLX. Skills are autonomous a
 
 ```bash
 pip install -e ".[dev]"    # Install in dev mode
-pytest tests/ -v           # Run all 53 tests
+pytest tests/ -v           # Run all 69 tests
 localagent list            # Verify CLI works
+localagent eval file-organizer  # Run skill evals against default model
 ```
 
 ## Architecture

@@ -189,6 +189,61 @@ def cmd_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Run evals against a skill, optionally benchmarking multiple models."""
+    from localagent.evals.runner import run_benchmark, save_results
+    from localagent.evals.report import print_result, print_benchmark
+
+    config = load_config()
+    model_cfg = get_model_config(config)
+
+    # Resolve models
+    if args.models:
+        model_paths = args.models
+    else:
+        model_paths = [model_cfg.get("model_path", "mlx-community/Llama-3.2-3B-Instruct-4bit")]
+
+    # Resolve scenarios
+    if args.skill == "file-organizer":
+        from localagent.skills.file_organizer.evals.scenarios import get_scenarios
+        scenarios = get_scenarios(args.scenarios)
+    else:
+        console.print(f"[red]No evals defined for skill '{args.skill}'[/red]")
+        return 1
+
+    if not scenarios:
+        console.print("[yellow]No matching scenarios found[/yellow]")
+        return 1
+
+    console.print(
+        f"[bold]Running {len(scenarios)} scenario(s) against "
+        f"{len(model_paths)} model(s)[/bold]\n"
+    )
+
+    results = run_benchmark(
+        model_paths,
+        scenarios,
+        skill_name=args.skill,
+        max_tokens=model_cfg.get("max_tokens", 4096),
+        temperature=model_cfg.get("temperature", 0.3),
+    )
+
+    # Display results
+    if len(results) == 1:
+        print_result(results[0], console)
+    else:
+        print_benchmark(results, console)
+
+    # Save if requested
+    if args.output:
+        save_results(results, Path(args.output))
+        console.print(f"[dim]Results saved to {args.output}[/dim]")
+
+    # Exit non-zero if any model had failures
+    any_failures = any(r.failed > 0 for r in results)
+    return 1 if any_failures else 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     """List available skills."""
     registry = get_registry()
@@ -274,6 +329,29 @@ def build_parser() -> argparse.ArgumentParser:
     # list
     sub.add_parser("list", help="List available skills")
 
+    # eval
+    eval_parser = sub.add_parser("eval", help="Run evals against a skill")
+    eval_parser.add_argument("skill", help="Skill name (e.g. file-organizer)")
+    eval_parser.add_argument(
+        "--model",
+        action="append",
+        dest="models",
+        help="Model to evaluate (can be repeated for benchmarking). "
+        "Defaults to the configured model.",
+    )
+    eval_parser.add_argument(
+        "--scenario",
+        action="append",
+        dest="scenarios",
+        help="Run specific scenario(s) by name (default: all)",
+    )
+    eval_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Save results to a YAML file",
+    )
+
     return parser
 
 
@@ -297,6 +375,7 @@ def main() -> None:
         "taxonomy": cmd_taxonomy,
         "config": cmd_config,
         "list": cmd_list,
+        "eval": cmd_eval,
     }
 
     if args.command is None:

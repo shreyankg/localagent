@@ -36,6 +36,7 @@ localagent undo <skill>                  # Undo last run
 localagent undo <skill> --interactive    # Selectively undo
 localagent schedule <skill>              # Install daily cron trigger
 localagent unschedule <skill>            # Remove cron trigger
+localagent eval <skill>                  # Run evals against configured model
 localagent config                        # Show configuration
 ```
 
@@ -58,6 +59,25 @@ model:
 
 To swap models, change `model_path` to any MLX-compatible model (e.g. a quantized Gemma, Phi, or Mistral). Each skill has its own config section -- see the skill's README for details.
 
+## Evals and Benchmarking
+
+Every skill can ship with eval scenarios that test LLM output quality. Run evals to score a model, or benchmark multiple models side-by-side:
+
+```bash
+# Eval with the configured default model
+localagent eval file-organizer
+
+# Benchmark multiple models head-to-head
+localagent eval file-organizer \
+  --model mlx-community/Llama-3.2-3B-Instruct-4bit \
+  --model mlx-community/gemma-2-9b-it-4bit
+
+# Run a specific scenario, save results to YAML
+localagent eval file-organizer --scenario basic-file-types --output results.yaml
+```
+
+The file organizer ships with 5 scenarios testing categorization quality across basic file types, content-aware separation, ambiguous filenames, large filesets, and semantic nuance. See the [eval scenarios source](src/localagent/skills/file_organizer/evals/scenarios.py) for details.
+
 ## Safety
 
 Skills operate in a sandbox with no ability to delete files, access directories outside their config, or bypass permission checks. See [GUARDRAILS.md](GUARDRAILS.md) for the complete safety architecture.
@@ -74,8 +94,14 @@ src/localagent/
 │   ├── skill.py                    # Skill ABC and manifest
 │   ├── registry.py                 # Skill discovery and instantiation
 │   └── triggers.py                 # Cron scheduling
+├── evals/
+│   ├── scenario.py                 # EvalScenario ABC, EvalScore, EvalResult
+│   ├── runner.py                   # Run scenarios against models, save results
+│   └── report.py                   # Rich terminal reporting and leaderboards
 └── skills/
-    └── file_organizer/             # Built-in skill (see its README)
+    └── file_organizer/
+        ├── evals/scenarios.py      # 5 eval scenarios for categorization quality
+        └── ...                     # Skill implementation (see its README)
 ```
 
 ## Tests
