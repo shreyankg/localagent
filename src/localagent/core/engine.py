@@ -42,16 +42,60 @@ class Engine:
 
     # -- prompt formatting ---------------------------------------------------
 
+    @staticmethod
+    def _fold_system_into_user(
+        messages: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        """Merge any leading system message into the first user message.
+
+        Some models (e.g. Gemma 2) don't support a ``system`` role in their
+        chat template.  This helper prepends the system content to the first
+        user turn so the instructions are still seen by the model.
+        """
+        if not messages or messages[0]["role"] != "system":
+            return messages
+
+        system_content = messages[0]["content"]
+        rest = messages[1:]
+        merged: list[dict[str, str]] = []
+        injected = False
+        for msg in rest:
+            if not injected and msg["role"] == "user":
+                merged.append({
+                    "role": "user",
+                    "content": f"{system_content}\n\n{msg['content']}",
+                })
+                injected = True
+            else:
+                merged.append(msg)
+        # Edge case: system message but no user message
+        if not injected:
+            merged.insert(0, {"role": "user", "content": system_content})
+        return merged
+
     def _apply_chat_template(self, messages: list[dict[str, str]]) -> str:
         """Format messages using the tokenizer's chat template.
 
         ``messages`` is a list of ``{"role": ..., "content": ...}`` dicts.
+        If the template rejects the system role, the system message is
+        automatically folded into the first user message and retried.
         """
         self._ensure_loaded()
         if hasattr(self._tokenizer, "apply_chat_template"):
-            return self._tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
+            try:
+                return self._tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            except Exception as exc:
+                if "system" in str(exc).lower():
+                    logger.debug(
+                        "System role not supported by template, folding into user message"
+                    )
+                    folded = self._fold_system_into_user(messages)
+                    return self._tokenizer.apply_chat_template(
+                        folded, tokenize=False, add_generation_prompt=True
+                    )
+                raise
         # Fallback for models without a chat template
         parts: list[str] = []
         for msg in messages:
