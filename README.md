@@ -75,6 +75,34 @@ localagent eval file-organizer \
   --output benchmark.yaml
 ```
 
+**Sample results on M3 Pro:**
+
+| Rank | Model | Score | Pass Rate | Time |
+|------|-------|------:|-----------|-----:|
+| 1 | gemma-2-9b-it-4bit | 11.2/12.0 (93%) | 12/12 | 245.6s |
+| 2 | Qwen2.5-14B-Instruct-4bit | 10.8/12.0 (90%) | 12/12 | 319.3s |
+| 3 | Llama-3.2-3B-Instruct-4bit | 10.7/12.0 (89%) | 12/12 | 78.2s |
+
+<details>
+<summary>Per-scenario breakdown</summary>
+
+| Scenario | Llama-3.2-3B | gemma-2-9b | Qwen2.5-14B |
+|----------|:---:|:---:|:---:|
+| basic-file-types | 100% | 100% | 100% |
+| content-aware | 70% | 70% | 70% |
+| ambiguous-files | 100% | 100% | 100% |
+| large-fileset | 91% | 91% | 91% |
+| semantic-nuance | 80% | 80% | 80% |
+| downloads-chaos | 100% | 100% | 100% |
+| personal-finance | 82% | 94% | 89% |
+| screenshot-overload | 100% | 100% | 100% |
+| work-personal-blend | 100% | 92% | 100% |
+| identity-documents | 79% | 100% | 79% |
+| mixed-media-project | 70% | 90% | 80% |
+| multilingual-filenames | 100% | 100% | 88% |
+
+</details>
+
 ## Safety
 
 Skills operate in a sandbox with no ability to delete files, access directories outside their config, or bypass permission checks. See [GUARDRAILS.md](GUARDRAILS.md) for the complete safety architecture.

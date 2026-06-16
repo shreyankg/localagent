@@ -60,6 +60,7 @@ class FileOrganizerSkill(Skill):
             exclude_patterns=self._config.get("exclude_patterns", []),
             skip_hidden=self._config.get("skip_hidden", True),
             content_preview_bytes=self._config.get("content_preview_bytes", 512),
+            extra_text_extensions=self._config.get("extra_text_extensions"),
         )
 
         if not profiles:

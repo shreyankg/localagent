@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ from localagent.core.safefs import SafeFS
 logger = logging.getLogger(__name__)
 
 # Extensions we can safely read as text for content preview
-_TEXT_EXTENSIONS: set[str] = {
+_DEFAULT_TEXT_EXTENSIONS: frozenset[str] = frozenset({
     ".txt", ".md", ".markdown", ".rst", ".csv", ".tsv",
     ".json", ".yaml", ".yml", ".toml", ".xml", ".html", ".htm",
     ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".c", ".cpp", ".h",
@@ -24,7 +25,168 @@ _TEXT_EXTENSIONS: set[str] = {
     ".sql", ".r", ".R", ".m", ".tex", ".bib",
     ".log", ".ini", ".cfg", ".conf", ".env",
     ".gitignore", ".dockerignore",
-}
+})
+
+
+# ── Filename pattern recognition ──────────────────────────────────────────
+# Detects well-known naming conventions from OSes, apps, and document types
+# to give the LLM richer signal — especially for binary files like PDFs
+# where we can't read content.
+
+_FILENAME_PATTERNS: list[tuple[re.Pattern[str], dict[str, str]]] = [
+    # macOS screenshots: "Screenshot 2024-03-15 at 2.30.22 PM.png"
+    (
+        re.compile(r"^Screenshot \d{4}-\d{2}-\d{2} at .+\.\w+$"),
+        {"source": "macos-screenshot"},
+    ),
+    # Linux screenshots: "Screenshot From 2025-07-10 15-39-27.png"
+    (
+        re.compile(r"^Screenshot From \d{4}-\d{2}-\d{2} .+\.\w+$"),
+        {"source": "linux-screenshot"},
+    ),
+    # WhatsApp images: "WhatsApp Image 2024-12-09 at 19.42.33.jpeg"
+    (
+        re.compile(r"^WhatsApp (?:Image|Video) \d{4}-\d{2}-\d{2} at .+\.\w+$"),
+        {"source": "whatsapp"},
+    ),
+    # iOS camera: "IMG_1234.HEIC" or "IMG_1234.jpg"
+    (
+        re.compile(r"^IMG_\d{4,5}\.\w+$", re.IGNORECASE),
+        {"source": "ios-camera"},
+    ),
+    # Android camera: "IMG_20240315_142233.jpg"
+    (
+        re.compile(r"^IMG_\d{8}_\d{6}\.\w+$"),
+        {"source": "android-camera"},
+    ),
+    # Canon/Nikon RAW: "20240315_142233.CR3" or "_DSC1234.NEF"
+    (
+        re.compile(r"^(?:\d{8}_\d{6}|_DSC\d{4,5})\.\w+$"),
+        {"source": "dslr-camera"},
+    ),
+    # Zoom recordings: "GMT20250120-143022_Recording.m4a"
+    (
+        re.compile(r"^GMT\d{8}-\d{6}_Recording\.\w+$"),
+        {"source": "zoom-recording"},
+    ),
+    # macOS installers: "AppName-1.2.3.dmg" or "AppName.dmg"
+    (
+        re.compile(r"^.+\.dmg$", re.IGNORECASE),
+        {"type": "macos-installer"},
+    ),
+    # Browser duplicate downloads: "filename (1).ext", "filename (2).ext"
+    (
+        re.compile(r"^(.+?) \((\d+)\)(\.\w+)$"),
+        {"download_duplicate": "true"},
+    ),
+    # Scanner-generated long names
+    (
+        re.compile(r"^Scan_.*_\d{8}_\d{6}.*\.\w+$"),
+        {"source": "document-scanner"},
+    ),
+    # Payslips
+    (
+        re.compile(r"(?i)^payslip[_\s-]"),
+        {"doc_type": "payslip"},
+    ),
+    # Rent receipts
+    (
+        re.compile(r"(?i)rent[_\s-]?rec(?:ei|ie)pt"),
+        {"doc_type": "rent-receipt"},
+    ),
+    # Indian tax Form 16
+    (
+        re.compile(r"(?i)form\s*16"),
+        {"doc_type": "tax-form-16"},
+    ),
+    # Aadhaar
+    (
+        re.compile(r"(?i)(?:e?aadhaar|EAadhaar)"),
+        {"doc_type": "aadhaar-id"},
+    ),
+    # PAN Card
+    (
+        re.compile(r"(?i)^PAN[_\s-]?Card"),
+        {"doc_type": "pan-card"},
+    ),
+    # Telecom / internet bills (common Indian providers)
+    (
+        re.compile(r"(?i)(?:VIL|Jio|Airtel|BSNL|ACT)[_\s-].*(?:bill|invoice)", re.IGNORECASE),
+        {"doc_type": "telecom-bill"},
+    ),
+    # Credit card statements
+    (
+        re.compile(r"(?i)(?:CC|credit[_\s-]?card)[_\s-]?statement"),
+        {"doc_type": "credit-card-statement"},
+    ),
+    # Mutual fund / investment statements
+    (
+        re.compile(r"(?i)(?:mutual\s*fund|CAS)[_\s-]?statement"),
+        {"doc_type": "investment-statement"},
+    ),
+    # Insurance policies
+    (
+        re.compile(r"(?i)insurance[_\s-]?polic"),
+        {"doc_type": "insurance-policy"},
+    ),
+    # Generic invoice / bill patterns
+    (
+        re.compile(r"(?i)(?:^|\b)invoice"),
+        {"doc_type": "invoice"},
+    ),
+    (
+        re.compile(r"(?i)(?:^|\b)receipt"),
+        {"doc_type": "receipt"},
+    ),
+]
+
+
+def detect_filename_hints(name: str) -> dict[str, str]:
+    """Extract structured hints from well-known filename patterns.
+
+    Returns a dict of hint key-value pairs, empty if no patterns match.
+    Only the first matching pattern is used to avoid conflicting hints.
+    """
+    for pattern, hints in _FILENAME_PATTERNS:
+        m = pattern.search(name)
+        if m:
+            result = dict(hints)
+            # For duplicate downloads, also extract the base filename
+            if "download_duplicate" in result:
+                result["duplicate_of"] = m.group(1) + m.group(3)
+            return result
+    return {}
+
+
+def find_duplicate_groups(
+    profiles: list[FileProfile],
+) -> dict[str, list[FileProfile]]:
+    """Identify browser-duplicate groups: file.pdf, file (1).pdf, file (2).pdf.
+
+    Returns a mapping of base filename → list of duplicate profiles.
+    Only includes groups with at least one duplicate (2+ files).
+    """
+    dup_pattern = re.compile(r"^(.+?) \(\d+\)(\.\w+)$")
+    # Map base name → list of profiles (base + duplicates)
+    groups: dict[str, list[FileProfile]] = {}
+
+    base_lookup: dict[str, FileProfile] = {}
+    for p in profiles:
+        base_lookup[p.name] = p
+
+    for p in profiles:
+        m = dup_pattern.match(p.name)
+        if m:
+            base_name = m.group(1) + m.group(2)
+            if base_name not in groups:
+                groups[base_name] = []
+                # Include the base file if it exists
+                if base_name in base_lookup:
+                    groups[base_name].append(base_lookup[base_name])
+            groups[base_name].append(p)
+
+    # Only return groups that actually have duplicates
+    return {k: v for k, v in groups.items() if len(v) > 1}
 
 
 @dataclass
@@ -40,6 +202,7 @@ class FileProfile:
     modified: datetime | None = None
     content_preview: str | None = None
     is_readable: bool = False
+    hints: dict[str, str] = field(default_factory=dict)
 
     def to_summary(self) -> dict[str, Any]:
         """Compact dict representation for LLM prompts."""
@@ -51,6 +214,8 @@ class FileProfile:
         }
         if self.content_preview:
             d["content_preview"] = self.content_preview
+        if self.hints:
+            d["hints"] = self.hints
         return d
 
 
@@ -94,9 +259,10 @@ def _get_mime_type(path: Path) -> str:
         return fallback.get(ext, "application/octet-stream")
 
 
-def _is_text_readable(path: Path) -> bool:
+def _is_text_readable(path: Path, text_extensions: frozenset[str] | None = None) -> bool:
     """Heuristic: can we read this file as text?"""
-    return path.suffix.lower() in _TEXT_EXTENSIONS
+    exts = text_extensions if text_extensions is not None else _DEFAULT_TEXT_EXTENSIONS
+    return path.suffix.lower() in exts
 
 
 def _should_exclude(name: str, exclude_patterns: list[str], skip_hidden: bool) -> bool:
@@ -116,6 +282,7 @@ def scan_directory(
     exclude_patterns: list[str] | None = None,
     skip_hidden: bool = True,
     content_preview_bytes: int = 512,
+    extra_text_extensions: list[str] | None = None,
 ) -> list[FileProfile]:
     """Scan a directory and build FileProfile objects for each file.
 
@@ -124,6 +291,11 @@ def scan_directory(
     """
     exclude_patterns = exclude_patterns or []
     profiles: list[FileProfile] = []
+
+    # Build effective text extensions set
+    text_extensions = _DEFAULT_TEXT_EXTENSIONS
+    if extra_text_extensions:
+        text_extensions = _DEFAULT_TEXT_EXTENSIONS | frozenset(extra_text_extensions)
 
     try:
         entries = safefs.list_dir(directory)
@@ -153,7 +325,7 @@ def scan_directory(
 
         # Content preview for readable files
         content_preview = None
-        is_readable = _is_text_readable(entry)
+        is_readable = _is_text_readable(entry, text_extensions)
         if is_readable:
             try:
                 content_preview = safefs.read_file(
@@ -162,6 +334,9 @@ def scan_directory(
             except Exception as exc:
                 logger.debug("Cannot read %s for preview: %s", name, exc)
                 content_preview = None
+
+        # Detect filename hints (screenshots, duplicates, doc types, etc.)
+        hints = detect_filename_hints(name)
 
         profile = FileProfile(
             name=name,
@@ -173,6 +348,7 @@ def scan_directory(
             modified=stat_info.get("modified"),
             content_preview=content_preview,
             is_readable=is_readable,
+            hints=hints,
         )
         profiles.append(profile)
 
@@ -187,6 +363,7 @@ def scan_all(
     exclude_patterns: list[str] | None = None,
     skip_hidden: bool = True,
     content_preview_bytes: int = 512,
+    extra_text_extensions: list[str] | None = None,
 ) -> list[FileProfile]:
     """Scan multiple directories and return combined file profiles."""
     all_profiles: list[FileProfile] = []
@@ -198,6 +375,7 @@ def scan_all(
                 exclude_patterns=exclude_patterns,
                 skip_hidden=skip_hidden,
                 content_preview_bytes=content_preview_bytes,
+                extra_text_extensions=extra_text_extensions,
             )
         )
     return all_profiles

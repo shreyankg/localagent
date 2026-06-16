@@ -30,6 +30,12 @@ skills:
     # Max bytes to read for content preview of text files
     content_preview_bytes: 512
 
+    # Additional file extensions to treat as text for content preview
+    # (added on top of the built-in set; use lowercase with leading dot)
+    # extra_text_extensions:
+    #   - ".rtf"
+    #   - ".nfo"
+
     # Warn (in logs) if a single run proposes more than this many moves
     move_warning_threshold: 50
 

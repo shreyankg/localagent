@@ -1,0 +1,1334 @@
+- model: mlx-community/Llama-3.2-3B-Instruct-4bit
+  skill: file-organizer
+  total_score: 10.729
+  max_score: 12.0
+  percentage: 89.4
+  passed: 12
+  failed: 0
+  time_seconds: 78.19
+  scenarios:
+  - name: basic-file-types
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 9
+        range: 3-10
+      grouping:
+        groups:
+        - files:
+          - sunset.png
+          - vacation.jpg
+          categories_assigned:
+          - Images
+          grouped: true
+      separation:
+        separated: 2
+        total: 2
+      time_seconds: 6.13
+  - name: content-aware
+    passed: true
+    score: 0.7
+    max_score: 1.0
+    percentage: 70.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      separation:
+        separated: 3
+        total: 3
+      grouping:
+        groups:
+        - files:
+          - analyze_sales.py
+          - invoice_q4.csv
+          categories_assigned:
+          - Data Import/Export
+          - Python Scripts
+          grouped: false
+      time_seconds: 5.08
+  - name: ambiguous-files
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 4
+        range: 2-8
+      grouping:
+        groups:
+        - files:
+          - IMG_20240315_142233.jpg
+          - IMG_20240315_142234.jpg
+          - IMG_20240315_142235.jpg
+          categories_assigned:
+          - Images
+          grouped: true
+      time_seconds: 3.72
+  - name: large-fileset
+    passed: true
+    score: 0.912
+    max_score: 1.0
+    percentage: 91.2
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 5-15
+      grouping:
+        groups:
+        - files:
+          - cover_letter.docx
+          - resume_2024.pdf
+          categories_assigned:
+          - Cover Letter
+          - Resume
+          grouped: false
+        - files:
+          - bank_statement_q1.csv
+          - expenses_march.xlsx
+          - receipt_amazon_0315.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - Dockerfile
+          - main.py
+          - schema.sql
+          categories_assigned:
+          - Software Development
+          grouped: true
+        - files:
+          - meeting_recording.m4a
+          - podcast_ep42.mp3
+          categories_assigned:
+          - Media Files
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 9.66
+  - name: semantic-nuance
+    passed: true
+    score: 0.8
+    max_score: 1.0
+    percentage: 80.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      separation:
+        separated: 3
+        total: 3
+      grouping:
+        groups:
+        - files:
+          - api_docs.md
+          - migrate_db.py
+          categories_assigned:
+          - API Documentation
+          - Database Management
+          grouped: false
+      time_seconds: 4.23
+  - name: downloads-chaos
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - invoice_march_2024 (1).pdf
+          - invoice_march_2024 (2).pdf
+          - invoice_march_2024.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - AnyDesk.dmg
+          - KalturaCapture-3.29.12.dmg
+          - Obsidian-1.5.8-universal.dmg
+          categories_assigned:
+          - Software and Applications
+          grouped: true
+        - files:
+          - WhatsApp Image 2024-12-09 at 19.42.33.jpeg
+          - WhatsApp Image 2024-12-09 at 19.42.34.jpeg
+          - WhatsApp Image 2024-12-10 at 10.15.22.jpeg
+          categories_assigned:
+          - Images and Screenshots
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 9.29
+  - name: personal-finance
+    passed: true
+    score: 0.825
+    max_score: 1.0
+    percentage: 82.5
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - Payslip_2025-01-31.pdf
+          - Payslip_2025-02-28.pdf
+          - Payslip_2025-03-31.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - ACT_Fibernet_Invoice_Oct2024.pdf
+          - Jio_bill_sept_2024.pdf
+          - VIL_bill_9604587789_2024-08-14.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - rent-receipt-april-june-2024.pdf
+          - rent-receipt-july-sept-2024.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - AIS_Annual_Information_Statement_2024.pdf
+          - Form 16 - Part A.pdf
+          - Form 16 - Part B.pdf
+          categories_assigned:
+          - Financial Documents
+          - Tax Documents
+          grouped: false
+      separation:
+        separated: 3
+        total: 4
+      time_seconds: 7.27
+  - name: screenshot-overload
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 5
+        range: 3-8
+      grouping:
+        groups:
+        - files:
+          - Screenshot 2024-03-15 at 2.30.22 PM.png
+          - Screenshot 2024-11-20 at 10.15.44 AM.png
+          - Screenshot 2025-01-08 at 4.52.11 PM.png
+          - Screenshot From 2025-06-22 09-12-03.png
+          - Screenshot From 2025-07-10 15-39-27.png
+          categories_assigned:
+          - Screenshots
+          grouped: true
+        - files:
+          - IMG_4523.HEIC
+          - IMG_4524.HEIC
+          - IMG_4525.HEIC
+          categories_assigned:
+          - Photos
+          grouped: true
+        - files:
+          - aadhaar_card_scan.png
+          - passport_scan_page1.png
+          categories_assigned:
+          - Documents
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 6.02
+  - name: work-personal-blend
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - Brno_trip_itinerary_2025.pdf
+          - flight_booking_DEL_PRG.pdf
+          - hotel_confirmation_hilton.pdf
+          categories_assigned:
+          - Travel Documents
+          grouped: true
+        - files:
+          - Gupta_Shreyank_Resume_2025.pdf
+          - cover_letter_google.docx
+          categories_assigned:
+          - Resumes
+          grouped: true
+        - files:
+          - GMT20250120-143022_Recording.m4a
+          - zoom_recording_standup_2025-01-15.mp4
+          categories_assigned:
+          - Videos
+          grouped: true
+      separation:
+        separated: 4
+        total: 4
+      time_seconds: 6.04
+  - name: identity-documents
+    passed: true
+    score: 0.792
+    max_score: 1.0
+    percentage: 79.2
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 9
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - EAadhaar_952783784057.pdf
+          - PAN_Card_ABCPG1234H.pdf
+          categories_assigned:
+          - Identification Documents
+          grouped: true
+        - files:
+          - Schengen_Visa_Application.pdf
+          - passport_photo_35x45mm.jpg
+          - visa_appointment_confirmation.pdf
+          categories_assigned:
+          - Images
+          - Personal Documents
+          - Visa Applications
+          grouped: false
+        - files:
+          - BTech_Degree_Certificate.pdf
+          - semester8_marksheet.pdf
+          categories_assigned:
+          - Education Documents
+          grouped: true
+      separation:
+        separated: 3
+        total: 4
+      time_seconds: 6.71
+  - name: mixed-media-project
+    passed: true
+    score: 0.7
+    max_score: 1.0
+    percentage: 70.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 7
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - app_redesign_v2.fig
+          - brand_guidelines.sketch
+          - icon_set_draft.xcf
+          categories_assigned:
+          - App Design
+          - Logo and Branding
+          grouped: false
+        - files:
+          - app_icon.svg
+          - logo_dark_512x512.png
+          - logo_light_512x512.png
+          categories_assigned:
+          - App Design
+          - Logo and Branding
+          grouped: false
+        - files:
+          - Inter-Bold.woff2
+          - Inter-Regular.woff2
+          categories_assigned:
+          - Fonts and Typography
+          grouped: true
+        - files:
+          - client_feedback_round2.docx
+          - meeting_notes_kickoff.md
+          - project_timeline.xlsx
+          categories_assigned:
+          - Client Feedback
+          - Project Management
+          grouped: false
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 6.36
+  - name: multilingual-filenames
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 3-10
+      grouping:
+        groups:
+        - files:
+          - 20240315_142233.CR3
+          - 20240315_142234.CR3
+          categories_assigned:
+          - Miscellaneous
+          grouped: true
+        - files:
+          - "R\xE9sum\xE9_Fran\xE7ois_M\xFCller.pdf"
+          - "\uC774\uB825\uC11C_\uAE40\uBBFC\uC218.pdf"
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 7.68
+- model: mlx-community/gemma-2-9b-it-4bit
+  skill: file-organizer
+  total_score: 11.175
+  max_score: 12.0
+  percentage: 93.1
+  passed: 12
+  failed: 0
+  time_seconds: 245.6
+  scenarios:
+  - name: basic-file-types
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 3-10
+      grouping:
+        groups:
+        - files:
+          - sunset.png
+          - vacation.jpg
+          categories_assigned:
+          - Images
+          grouped: true
+      separation:
+        separated: 2
+        total: 2
+      time_seconds: 16.33
+  - name: content-aware
+    passed: true
+    score: 0.7
+    max_score: 1.0
+    percentage: 70.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      separation:
+        separated: 3
+        total: 3
+      grouping:
+        groups:
+        - files:
+          - analyze_sales.py
+          - invoice_q4.csv
+          categories_assigned:
+          - Data Analysis
+          - Finance
+          grouped: false
+      time_seconds: 12.21
+  - name: ambiguous-files
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 4
+        range: 2-8
+      grouping:
+        groups:
+        - files:
+          - IMG_20240315_142233.jpg
+          - IMG_20240315_142234.jpg
+          - IMG_20240315_142235.jpg
+          categories_assigned:
+          - Photos
+          grouped: true
+      time_seconds: 14.93
+  - name: large-fileset
+    passed: true
+    score: 0.912
+    max_score: 1.0
+    percentage: 91.2
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 5-15
+      grouping:
+        groups:
+        - files:
+          - cover_letter.docx
+          - resume_2024.pdf
+          categories_assigned:
+          - Personal Documents
+          grouped: true
+        - files:
+          - bank_statement_q1.csv
+          - expenses_march.xlsx
+          - receipt_amazon_0315.pdf
+          categories_assigned:
+          - Financial Records
+          grouped: true
+        - files:
+          - Dockerfile
+          - main.py
+          - schema.sql
+          categories_assigned:
+          - Projects
+          - Software Development
+          grouped: false
+        - files:
+          - meeting_recording.m4a
+          - podcast_ep42.mp3
+          categories_assigned:
+          - Media
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 30.63
+  - name: semantic-nuance
+    passed: true
+    score: 0.8
+    max_score: 1.0
+    percentage: 80.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      separation:
+        separated: 3
+        total: 3
+      grouping:
+        groups:
+        - files:
+          - api_docs.md
+          - migrate_db.py
+          categories_assigned:
+          - Documentation
+          - Machine Learning
+          grouped: false
+      time_seconds: 12.46
+  - name: downloads-chaos
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 7
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - invoice_march_2024 (1).pdf
+          - invoice_march_2024 (2).pdf
+          - invoice_march_2024.pdf
+          categories_assigned:
+          - Invoices
+          grouped: true
+        - files:
+          - AnyDesk.dmg
+          - KalturaCapture-3.29.12.dmg
+          - Obsidian-1.5.8-universal.dmg
+          categories_assigned:
+          - Software
+          grouped: true
+        - files:
+          - WhatsApp Image 2024-12-09 at 19.42.33.jpeg
+          - WhatsApp Image 2024-12-09 at 19.42.34.jpeg
+          - WhatsApp Image 2024-12-10 at 10.15.22.jpeg
+          categories_assigned:
+          - Images
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 26.26
+  - name: personal-finance
+    passed: true
+    score: 0.938
+    max_score: 1.0
+    percentage: 93.8
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 4
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - Payslip_2025-01-31.pdf
+          - Payslip_2025-02-28.pdf
+          - Payslip_2025-03-31.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - ACT_Fibernet_Invoice_Oct2024.pdf
+          - Jio_bill_sept_2024.pdf
+          - VIL_bill_9604587789_2024-08-14.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - rent-receipt-april-june-2024.pdf
+          - rent-receipt-july-sept-2024.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - AIS_Annual_Information_Statement_2024.pdf
+          - Form 16 - Part A.pdf
+          - Form 16 - Part B.pdf
+          categories_assigned:
+          - Tax Documents
+          grouped: true
+      separation:
+        separated: 3
+        total: 4
+      time_seconds: 21.73
+  - name: screenshot-overload
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 5
+        range: 3-8
+      grouping:
+        groups:
+        - files:
+          - Screenshot 2024-03-15 at 2.30.22 PM.png
+          - Screenshot 2024-11-20 at 10.15.44 AM.png
+          - Screenshot 2025-01-08 at 4.52.11 PM.png
+          - Screenshot From 2025-06-22 09-12-03.png
+          - Screenshot From 2025-07-10 15-39-27.png
+          categories_assigned:
+          - Screenshots
+          grouped: true
+        - files:
+          - IMG_4523.HEIC
+          - IMG_4524.HEIC
+          - IMG_4525.HEIC
+          categories_assigned:
+          - Personal Photos
+          grouped: true
+        - files:
+          - aadhaar_card_scan.png
+          - passport_scan_page1.png
+          categories_assigned:
+          - Documents
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 21.88
+  - name: work-personal-blend
+    passed: true
+    score: 0.925
+    max_score: 1.0
+    percentage: 92.5
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - Brno_trip_itinerary_2025.pdf
+          - flight_booking_DEL_PRG.pdf
+          - hotel_confirmation_hilton.pdf
+          categories_assigned:
+          - Personal
+          grouped: true
+        - files:
+          - Gupta_Shreyank_Resume_2025.pdf
+          - cover_letter_google.docx
+          categories_assigned:
+          - Personal
+          grouped: true
+        - files:
+          - GMT20250120-143022_Recording.m4a
+          - zoom_recording_standup_2025-01-15.mp4
+          categories_assigned:
+          - Meeting
+          grouped: true
+      separation:
+        separated: 3
+        total: 4
+      time_seconds: 20.53
+  - name: identity-documents
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 10
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - EAadhaar_952783784057.pdf
+          - PAN_Card_ABCPG1234H.pdf
+          categories_assigned:
+          - Personal Documents
+          grouped: true
+        - files:
+          - Schengen_Visa_Application.pdf
+          - passport_photo_35x45mm.jpg
+          - visa_appointment_confirmation.pdf
+          categories_assigned:
+          - Travel Documents
+          grouped: true
+        - files:
+          - BTech_Degree_Certificate.pdf
+          - semester8_marksheet.pdf
+          categories_assigned:
+          - Education
+          grouped: true
+      separation:
+        separated: 4
+        total: 4
+      time_seconds: 21.18
+  - name: mixed-media-project
+    passed: true
+    score: 0.9
+    max_score: 1.0
+    percentage: 90.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 4
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - app_redesign_v2.fig
+          - brand_guidelines.sketch
+          - icon_set_draft.xcf
+          categories_assigned:
+          - Design Assets
+          grouped: true
+        - files:
+          - app_icon.svg
+          - logo_dark_512x512.png
+          - logo_light_512x512.png
+          categories_assigned:
+          - Design Assets
+          grouped: true
+        - files:
+          - Inter-Bold.woff2
+          - Inter-Regular.woff2
+          categories_assigned:
+          - Fonts
+          grouped: true
+        - files:
+          - client_feedback_round2.docx
+          - meeting_notes_kickoff.md
+          - project_timeline.xlsx
+          categories_assigned:
+          - Project Documentation
+          grouped: true
+      separation:
+        separated: 2
+        total: 3
+      time_seconds: 18.88
+  - name: multilingual-filenames
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 3-10
+      grouping:
+        groups:
+        - files:
+          - 20240315_142233.CR3
+          - 20240315_142234.CR3
+          categories_assigned:
+          - Photos
+          grouped: true
+        - files:
+          - "R\xE9sum\xE9_Fran\xE7ois_M\xFCller.pdf"
+          - "\uC774\uB825\uC11C_\uAE40\uBBFC\uC218.pdf"
+          categories_assigned:
+          - Personal Documents
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 28.57
+- model: mlx-community/Qwen2.5-14B-Instruct-4bit
+  skill: file-organizer
+  total_score: 10.767
+  max_score: 12.0
+  percentage: 89.7
+  passed: 12
+  failed: 0
+  time_seconds: 319.26
+  scenarios:
+  - name: basic-file-types
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 3-10
+      grouping:
+        groups:
+        - files:
+          - sunset.png
+          - vacation.jpg
+          categories_assigned:
+          - Images
+          grouped: true
+      separation:
+        separated: 2
+        total: 2
+      time_seconds: 22.45
+  - name: content-aware
+    passed: true
+    score: 0.7
+    max_score: 1.0
+    percentage: 70.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      separation:
+        separated: 3
+        total: 3
+      grouping:
+        groups:
+        - files:
+          - analyze_sales.py
+          - invoice_q4.csv
+          categories_assigned:
+          - CSV Data Files
+          - Data Analysis
+          grouped: false
+      time_seconds: 16.26
+  - name: ambiguous-files
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 4
+        range: 2-8
+      grouping:
+        groups:
+        - files:
+          - IMG_20240315_142233.jpg
+          - IMG_20240315_142234.jpg
+          - IMG_20240315_142235.jpg
+          categories_assigned:
+          - Images
+          grouped: true
+      time_seconds: 17.93
+  - name: large-fileset
+    passed: true
+    score: 0.912
+    max_score: 1.0
+    percentage: 91.2
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 11
+        range: 5-15
+      grouping:
+        groups:
+        - files:
+          - cover_letter.docx
+          - resume_2024.pdf
+          categories_assigned:
+          - Professional Documents
+          grouped: true
+        - files:
+          - bank_statement_q1.csv
+          - expenses_march.xlsx
+          - receipt_amazon_0315.pdf
+          categories_assigned:
+          - Financial Records
+          grouped: true
+        - files:
+          - Dockerfile
+          - main.py
+          - schema.sql
+          categories_assigned:
+          - Coding Projects
+          grouped: true
+        - files:
+          - meeting_recording.m4a
+          - podcast_ep42.mp3
+          categories_assigned:
+          - Audio Files
+          - Media Files
+          grouped: false
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 40.66
+  - name: semantic-nuance
+    passed: true
+    score: 0.8
+    max_score: 1.0
+    percentage: 80.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      separation:
+        separated: 3
+        total: 3
+      grouping:
+        groups:
+        - files:
+          - api_docs.md
+          - migrate_db.py
+          categories_assigned:
+          - API_Documentation
+          - Database_Migration
+          grouped: false
+      time_seconds: 17.11
+  - name: downloads-chaos
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - invoice_march_2024 (1).pdf
+          - invoice_march_2024 (2).pdf
+          - invoice_march_2024.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - AnyDesk.dmg
+          - KalturaCapture-3.29.12.dmg
+          - Obsidian-1.5.8-universal.dmg
+          categories_assigned:
+          - Software Installers
+          grouped: true
+        - files:
+          - WhatsApp Image 2024-12-09 at 19.42.33.jpeg
+          - WhatsApp Image 2024-12-09 at 19.42.34.jpeg
+          - WhatsApp Image 2024-12-10 at 10.15.22.jpeg
+          categories_assigned:
+          - WhatsApp Images
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 35.35
+  - name: personal-finance
+    passed: true
+    score: 0.888
+    max_score: 1.0
+    percentage: 88.8
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - Payslip_2025-01-31.pdf
+          - Payslip_2025-02-28.pdf
+          - Payslip_2025-03-31.pdf
+          categories_assigned:
+          - Financial Documents
+          grouped: true
+        - files:
+          - ACT_Fibernet_Invoice_Oct2024.pdf
+          - Jio_bill_sept_2024.pdf
+          - VIL_bill_9604587789_2024-08-14.pdf
+          categories_assigned:
+          - Bills and Receipts
+          - Financial Documents
+          grouped: false
+        - files:
+          - rent-receipt-april-june-2024.pdf
+          - rent-receipt-july-sept-2024.pdf
+          categories_assigned:
+          - Bills and Receipts
+          grouped: true
+        - files:
+          - AIS_Annual_Information_Statement_2024.pdf
+          - Form 16 - Part A.pdf
+          - Form 16 - Part B.pdf
+          categories_assigned:
+          - Legal and Tax Forms
+          grouped: true
+      separation:
+        separated: 4
+        total: 4
+      time_seconds: 31.14
+  - name: screenshot-overload
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 5
+        range: 3-8
+      grouping:
+        groups:
+        - files:
+          - Screenshot 2024-03-15 at 2.30.22 PM.png
+          - Screenshot 2024-11-20 at 10.15.44 AM.png
+          - Screenshot 2025-01-08 at 4.52.11 PM.png
+          - Screenshot From 2025-06-22 09-12-03.png
+          - Screenshot From 2025-07-10 15-39-27.png
+          categories_assigned:
+          - Screenshots
+          grouped: true
+        - files:
+          - IMG_4523.HEIC
+          - IMG_4524.HEIC
+          - IMG_4525.HEIC
+          categories_assigned:
+          - Personal Photos
+          grouped: true
+        - files:
+          - aadhaar_card_scan.png
+          - passport_scan_page1.png
+          categories_assigned:
+          - Document Scans
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 27.96
+  - name: work-personal-blend
+    passed: true
+    score: 1.0
+    max_score: 1.0
+    percentage: 100.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 7
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - Brno_trip_itinerary_2025.pdf
+          - flight_booking_DEL_PRG.pdf
+          - hotel_confirmation_hilton.pdf
+          categories_assigned:
+          - Travel_Documents
+          grouped: true
+        - files:
+          - Gupta_Shreyank_Resume_2025.pdf
+          - cover_letter_google.docx
+          categories_assigned:
+          - Documents
+          grouped: true
+        - files:
+          - GMT20250120-143022_Recording.m4a
+          - zoom_recording_standup_2025-01-15.mp4
+          categories_assigned:
+          - Meeting_Recordings
+          grouped: true
+      separation:
+        separated: 4
+        total: 4
+      time_seconds: 27.08
+  - name: identity-documents
+    passed: true
+    score: 0.792
+    max_score: 1.0
+    percentage: 79.2
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 8
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - EAadhaar_952783784057.pdf
+          - PAN_Card_ABCPG1234H.pdf
+          categories_assigned:
+          - IdentityDocuments
+          grouped: true
+        - files:
+          - Schengen_Visa_Application.pdf
+          - passport_photo_35x45mm.jpg
+          - visa_appointment_confirmation.pdf
+          categories_assigned:
+          - PersonalPhotos
+          - VisaDocuments
+          grouped: false
+        - files:
+          - BTech_Degree_Certificate.pdf
+          - semester8_marksheet.pdf
+          categories_assigned:
+          - EducationDocuments
+          grouped: true
+      separation:
+        separated: 3
+        total: 4
+      time_seconds: 24.24
+  - name: mixed-media-project
+    passed: true
+    score: 0.8
+    max_score: 1.0
+    percentage: 80.0
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 4-10
+      grouping:
+        groups:
+        - files:
+          - app_redesign_v2.fig
+          - brand_guidelines.sketch
+          - icon_set_draft.xcf
+          categories_assigned:
+          - Brand Assets
+          - Design Files
+          grouped: false
+        - files:
+          - app_icon.svg
+          - logo_dark_512x512.png
+          - logo_light_512x512.png
+          categories_assigned:
+          - Brand Assets
+          - Design Files
+          grouped: false
+        - files:
+          - Inter-Bold.woff2
+          - Inter-Regular.woff2
+          categories_assigned:
+          - Fonts
+          grouped: true
+        - files:
+          - client_feedback_round2.docx
+          - meeting_notes_kickoff.md
+          - project_timeline.xlsx
+          categories_assigned:
+          - Project Documentation
+          grouped: true
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 24.74
+  - name: multilingual-filenames
+    passed: true
+    score: 0.875
+    max_score: 1.0
+    percentage: 87.5
+    error: null
+    details:
+      coverage:
+        coverage: 1.0
+        missing_files: []
+        hallucinated_files: []
+      taxonomy:
+        num_categories: 6
+        range: 3-10
+      grouping:
+        groups:
+        - files:
+          - 20240315_142233.CR3
+          - 20240315_142234.CR3
+          categories_assigned:
+          - Images
+          grouped: true
+        - files:
+          - "R\xE9sum\xE9_Fran\xE7ois_M\xFCller.pdf"
+          - "\uC774\uB825\uC11C_\uAE40\uBBFC\uC218.pdf"
+          categories_assigned:
+          - Documents
+          - Resumes
+          grouped: false
+      separation:
+        separated: 3
+        total: 3
+      time_seconds: 34.35
