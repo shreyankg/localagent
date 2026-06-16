@@ -70,13 +70,10 @@ localagent eval file-organizer
 # Benchmark multiple models head-to-head
 localagent eval file-organizer \
   --model mlx-community/Llama-3.2-3B-Instruct-4bit \
-  --model mlx-community/gemma-2-9b-it-4bit
-
-# Run a specific scenario, save results to YAML
-localagent eval file-organizer --scenario basic-file-types --output results.yaml
+  --model mlx-community/gemma-2-9b-it-4bit \
+  --model mlx-community/Qwen2.5-14B-Instruct-4bit \
+  --output benchmark.yaml
 ```
-
-The file organizer ships with 5 scenarios testing categorization quality across basic file types, content-aware separation, ambiguous filenames, large filesets, and semantic nuance. See the [eval scenarios source](src/localagent/skills/file_organizer/evals/scenarios.py) for details.
 
 ## Safety
 
@@ -100,7 +97,7 @@ src/localagent/
 │   └── report.py                   # Rich terminal reporting and leaderboards
 └── skills/
     └── file_organizer/
-        ├── evals/scenarios.py      # 5 eval scenarios for categorization quality
+        ├── evals/scenarios.py      # Eval scenarios for categorization quality
         └── ...                     # Skill implementation (see its README)
 ```
 

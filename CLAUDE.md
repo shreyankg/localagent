@@ -10,10 +10,12 @@ LocalAgent is a local AI agent framework powered by MLX. Skills are autonomous a
 
 ```bash
 pip install -e ".[dev]"    # Install in dev mode
-pytest tests/ -v           # Run all 69 tests
+pytest tests/ -v           # Run tests
 localagent list            # Verify CLI works
 localagent eval file-organizer  # Run skill evals against default model
 ```
+
+Evals and tests are separate concerns. Evals run against a real LLM and are executed via `localagent eval`. Do not write pytest tests for eval scenarios — no test file should import from or assert against eval scenario classes. Eval correctness is validated by running the evals themselves.
 
 ## Architecture
 
@@ -119,6 +121,11 @@ The trigger system is in `core/triggers.py`. Currently only `CronTrigger` exists
 | `~/.config/localagent/<skill>/` | Per-skill learned state (e.g. taxonomy) |
 | `~/.local/share/localagent/logs/` | Undo journals |
 | `config/default.yaml` | Shipped defaults (merged under user config) |
+
+## README Guidelines
+
+- Keep the README generic and stable. Do not embed specific counts, scenario names, or other details that change frequently (e.g. "ships with 5 scenarios testing X, Y, Z"). Instead, link to the source file and let the code be the source of truth.
+- The same applies to test counts, model lists, and similar evolving details.
 
 ## Code Style
 
