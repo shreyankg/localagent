@@ -147,6 +147,12 @@ Guidelines:
 - Group related files (e.g. a .docx and its companion .pdf should go together).
 - Think about the semantic purpose: a Python script about ML goes in a \
 different category than a shell utility script.
+- Pay attention to file extensions — they are strong signals for categorization:
+  .dmg/.pkg → Installers, .eml/.msg → Emails, .csv/.xlsx → Spreadsheets, \
+  .py/.js/.ts → Code, .jpg/.png/.heic → Photos, .mp4/.mov → Videos, \
+  .mp3/.wav/.flac → Music, .zip/.tar.gz/.rar → Archives, \
+  .pdf/.doc/.docx → Documents, .ics → Calendar.
+  Use extensions as a starting point, then refine with content and context.
 - Pay attention to the "hints" field — it tells you the file's likely source \
 (e.g. screenshot, whatsapp, camera) or document type (e.g. payslip, invoice, \
 tax form). Use these to make better categorization decisions.
@@ -157,6 +163,10 @@ descriptive labels (e.g. "Photos", "Documents"), never specific filenames \
 
 Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
 in your assignments.
+
+IMPORTANT: Every category name you use in "assignments" MUST also appear in \
+"taxonomy" with a description. Do not assign a file to a category that is \
+not listed in the taxonomy.
 
 Respond with ONLY valid JSON in this exact format:
 {
@@ -187,6 +197,12 @@ For example, if "Documents" exists, do NOT create "Text Documents" or \
 existing category at all — this should be rare.
 
 IMPORTANT rules:
+- Pay attention to file extensions — they are strong signals for categorization:
+  .dmg/.pkg → Installers, .eml/.msg → Emails, .csv/.xlsx → Spreadsheets, \
+  .py/.js/.ts → Code, .jpg/.png/.heic → Photos, .mp4/.mov → Videos, \
+  .mp3/.wav/.flac → Music, .zip/.tar.gz/.rar → Archives, \
+  .pdf/.doc/.docx → Documents, .ics → Calendar.
+  Use extensions as a starting point, then refine with content and context.
 - Category names must be short, human-readable folder names \
 (e.g. "Receipts & Invoices", "Code Projects", "Screenshots").
 - Category names must NEVER be filenames, file extensions, or technical \
@@ -198,6 +214,9 @@ any new ones you add.
 
 Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
 in your assignments.
+
+IMPORTANT: Every category name you use in "assignments" MUST also appear in \
+"taxonomy". Do not assign a file to a category that is not listed in the taxonomy.
 
 Respond with ONLY valid JSON in this exact format:
 {
@@ -509,7 +528,7 @@ def _validate_response(
                 category,
                 filename,
             )
-            taxonomy[category] = "Auto-added category"
+            taxonomy[category] = f"Files categorized as {category}"
         valid_assignments[filename] = category
 
     return {
