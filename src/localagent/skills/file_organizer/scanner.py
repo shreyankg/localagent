@@ -74,9 +74,13 @@ _EXTENSION_CATEGORIES: dict[str, str] = {
     # Presentations
     ".pptx": "Presentations", ".ppt": "Presentations",
     ".odp": "Presentations", ".key": "Presentations",
-    # Documents (word-processor formats)
-    ".doc": "Documents", ".docx": "Documents", ".odt": "Documents",
-    ".rtf": "Documents",
+    # Word-processor formats (specific name — "Documents" is too generic)
+    ".doc": "Word Documents", ".docx": "Word Documents",
+    ".odt": "Word Documents", ".rtf": "Word Documents",
+    # PDFs (fallback when content-based classification fails)
+    ".pdf": "PDF Documents",
+    # Web pages
+    ".html": "Web Pages", ".htm": "Web Pages",
 }
 
 

@@ -151,7 +151,8 @@ different category than a shell utility script.
   .dmg/.pkg → Installers, .eml/.msg → Emails, .csv/.xlsx → Spreadsheets, \
   .py/.js/.ts → Code, .jpg/.png/.heic → Photos, .mp4/.mov → Videos, \
   .mp3/.wav/.flac → Music, .zip/.tar.gz/.rar → Archives, \
-  .pdf/.doc/.docx → Documents, .ics → Calendar.
+  .pdf → (classify by content: Receipts, Tax Documents, Contracts, etc.), \
+  .doc/.docx → (classify by content), .ics → Calendar.
   Use extensions as a starting point, then refine with content and context.
 - Pay attention to the "hints" field — it tells you the file's likely source \
 (e.g. screenshot, whatsapp, camera) or document type (e.g. payslip, invoice, \
@@ -159,9 +160,12 @@ tax form). Use these to make better categorization decisions.
 - When a file has a "suggested_category" hint, USE that category as-is unless \
 the filename or content preview strongly suggests a more specific one. The \
 suggested_category is derived from the file extension and is reliable.
-- If a file's purpose is unclear, use a general category like "Miscellaneous".
-- NEVER use a filename as a category name. Categories must be generic \
-descriptive labels (e.g. "Photos", "Documents"), never specific filenames \
+- NEVER use generic catch-all categories like "Documents", "Miscellaneous", \
+"Other", or "General". Every file must go into a specific, descriptive \
+category (e.g. "Resumes", "Tax Documents", "Receipts & Invoices", \
+"Contracts", "Travel Documents", "Pay Statements").
+- NEVER use a filename as a category name. Categories must be descriptive \
+labels (e.g. "Photos", "Receipts & Invoices"), never specific filenames \
 (e.g. "IMG_0019.HEIC", "report.pdf").
 
 Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
@@ -194,8 +198,8 @@ Your job:
 2. Assign each new file to the MOST APPROPRIATE EXISTING category. \
 You MUST reuse existing categories wherever possible.
 3. Do NOT create renamed or rephrased versions of existing categories. \
-For example, if "Documents" exists, do NOT create "Text Documents" or \
-"Document Files" — use "Documents".
+For example, if "Photos" exists, do NOT create "Images" or \
+"Photo Files" — use "Photos".
 4. Only create a genuinely NEW category if the file does not fit ANY \
 existing category at all — this should be rare.
 
@@ -204,16 +208,25 @@ IMPORTANT rules:
   .dmg/.pkg → Installers, .eml/.msg → Emails, .csv/.xlsx → Spreadsheets, \
   .py/.js/.ts → Code, .jpg/.png/.heic → Photos, .mp4/.mov → Videos, \
   .mp3/.wav/.flac → Music, .zip/.tar.gz/.rar → Archives, \
-  .pdf/.doc/.docx → Documents, .ics → Calendar.
+  .pdf → (classify by content: Receipts, Tax Documents, Contracts, etc.), \
+  .doc/.docx → (classify by content), .ics → Calendar.
   Use extensions as a starting point, then refine with content and context.
+- Pay attention to the "hints" field — it tells you the file's likely source \
+(e.g. screenshot, whatsapp, camera) or document type (e.g. payslip, invoice, \
+tax form). Use these to make better categorization decisions.
 - When a file has a "suggested_category" hint, USE that category as-is unless \
 the filename or content preview strongly suggests a more specific one. The \
 suggested_category is derived from the file extension and is reliable. \
 If the suggested category matches an existing category, use the existing one.
+- NEVER use generic catch-all categories like "Documents", "Miscellaneous", \
+"Other", or "General". Every file must go into a specific, descriptive \
+category (e.g. "Resumes", "Tax Documents", "Receipts & Invoices", \
+"Contracts", "Travel Documents", "Pay Statements").
+- NEVER use a filename as a category name. Categories must be descriptive \
+labels (e.g. "Photos", "Receipts & Invoices"), never specific filenames \
+(e.g. "IMG_0019.HEIC", "report.pdf").
 - Category names must be short, human-readable folder names \
 (e.g. "Receipts & Invoices", "Code Projects", "Screenshots").
-- Category names must NEVER be filenames, file extensions, or technical \
-artifacts.
 - Include ALL existing categories in the taxonomy, even if no new files \
 are assigned to them.
 - The taxonomy in your response must list every existing category plus \
@@ -374,6 +387,13 @@ _YAML_ARTIFACTS = frozenset({
     "add only if truly needed",
     "existing category",
     "category name",
+    # Overly generic catch-all categories that prevent real classification
+    "documents",
+    "miscellaneous",
+    "misc",
+    "other",
+    "general",
+    "uncategorized",
 })
 
 _MAX_TAXONOMY_SIZE = 15
@@ -386,8 +406,11 @@ def _is_bad_category_name(
     """Return True if a category name looks like a filename or YAML artifact.
 
     Bad names include:
-    - Exact matches or substrings of known filenames being processed
+    - Exact matches of known filenames (e.g. ``report.pdf``)
+    - Filename stems that are long enough to be specific (>= 8 chars),
+      suggesting the LLM echoed a filename without its extension
     - YAML artifacts (e.g. ``true``, ``user_locked: true``)
+    - Generic catch-all categories (e.g. ``Documents``, ``Miscellaneous``)
     - Very short or empty strings
     """
     stripped = name.strip()
@@ -395,14 +418,18 @@ def _is_bad_category_name(
         return True
     if stripped.lower() in _YAML_ARTIFACTS:
         return True
-    # Check if the category name matches or looks like a known filename
-    # Only check if the category is a substring of a filename (i.e. it
-    # looks like a truncated/exact filename).  Do NOT check the reverse
-    # (filename in category) — that causes false positives like rejecting
-    # "Code Projects" because a file named "Code" exists.
     if known_filenames:
         for filename in known_filenames:
-            if stripped == filename or stripped in filename:
+            # Exact filename match (e.g. "report.pdf" as category)
+            if stripped == filename:
+                return True
+            # Category matches filename stem exactly, and stem is long
+            # enough to be a specific filename rather than a general
+            # concept.  Short stems like "Code", "Data", "Aadhaar" are
+            # legitimate category names; "Data Literacy Learning Paths"
+            # is clearly a filename stem being echoed back.
+            stem = Path(filename).stem
+            if stripped == stem and len(stem) >= 8:
                 return True
     return False
 
@@ -485,21 +512,28 @@ def _validate_response(
     result: dict[str, Any],
     id_to_filename: dict[str, str],
     all_filenames: set[str] | None = None,
+    profiles_by_name: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate LLM output and map short IDs back to real filenames.
 
     - Unknown IDs are dropped (the model hallucinated an ID).
     - Unknown categories are auto-added to the taxonomy rather than
       dropping the file, so no file is silently lost.
-    - Bad category names (filenames, YAML artifacts) are stripped from
-      the taxonomy and their files reassigned to ``Miscellaneous``.
+    - Bad category names (filenames, YAML artifacts, generic catch-alls)
+      are stripped from the taxonomy.  Files from bad categories are
+      reassigned to their ``suggested_category`` hint if available, or
+      to a category derived from their file extension.
 
     ``all_filenames`` is the full set of filenames being processed
     (across all batches) so we can detect the LLM echoing back a
     filename as a category name.
+
+    ``profiles_by_name`` maps filenames to their FileProfile objects
+    so we can look up ``suggested_category`` hints for fallback.
     """
     taxonomy = result.get("taxonomy", {})
     assignments = result.get("assignments", {})
+    profiles_by_name = profiles_by_name or {}
 
     # Build filename set: current batch + any extras passed in
     filenames = set(id_to_filename.values())
@@ -523,16 +557,33 @@ def _validate_response(
         if filename is None:
             logger.warning("LLM returned unknown ID: '%s' — skipping", key)
             continue
-        # Reassign files from bad categories to Miscellaneous
+        # Reassign files from bad categories using hints or extension
         if category in bad_names or _is_bad_category_name(category, filenames):
-            logger.info(
-                "Reassigning '%s' from bad category '%s' → 'Miscellaneous'",
-                filename,
-                category,
-            )
-            category = "Miscellaneous"
-            if "Miscellaneous" not in taxonomy:
-                taxonomy["Miscellaneous"] = "Uncategorized files"
+            # Try suggested_category from hints first
+            profile = profiles_by_name.get(filename)
+            suggested = None
+            if profile and hasattr(profile, "hints"):
+                suggested = profile.hints.get("suggested_category")
+            if suggested and not _is_bad_category_name(suggested):
+                logger.info(
+                    "Reassigning '%s' from bad category '%s' → '%s' (from hint)",
+                    filename, category, suggested,
+                )
+                category = suggested
+            else:
+                # Derive a category from file extension
+                ext = Path(filename).suffix.lower()
+                from localagent.skills.file_organizer.scanner import (
+                    _EXTENSION_CATEGORIES,
+                )
+                fallback = _EXTENSION_CATEGORIES.get(ext, "Other Files")
+                logger.info(
+                    "Reassigning '%s' from bad category '%s' → '%s' (from extension)",
+                    filename, category, fallback,
+                )
+                category = fallback
+            if category not in taxonomy:
+                taxonomy[category] = f"Files categorized as {category}"
         if category not in taxonomy:
             # Auto-add the category instead of dropping the file
             logger.info(
@@ -640,6 +691,7 @@ def categorize(
 
     # Collect all filenames so validation can detect filename-as-category
     all_known_filenames = {p.name for p in profiles}
+    all_profiles_by_name = {p.name: p for p in profiles}
 
     all_assignments: dict[str, str] = {}
     latest_taxonomy: dict[str, Any] = existing_taxonomy or {}
@@ -673,7 +725,9 @@ def categorize(
             )
             continue
 
-        result = _validate_response(result, id_map, all_known_filenames)
+        result = _validate_response(
+            result, id_map, all_known_filenames, all_profiles_by_name,
+        )
 
         all_assignments.update(result.get("assignments", {}))
 

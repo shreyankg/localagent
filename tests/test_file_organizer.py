@@ -260,7 +260,7 @@ class TestValidateResponse:
         all_filenames = {"readme.md", "data.csv", "report.pdf"}
         result = {
             "taxonomy": {
-                "Docs": "documents",
+                "Code": "source code",
                 "report.pdf": "a bad filename category",
                 "true": "a YAML artifact",
             },
@@ -270,12 +270,12 @@ class TestValidateResponse:
             },
         }
         validated = _validate_response(result, id_map, all_filenames)
-        # Bad categories should be removed, files reassigned to Miscellaneous
+        # Bad categories should be removed, files reassigned via extension
         assert "report.pdf" not in validated["taxonomy"]
         assert "true" not in validated["taxonomy"]
-        assert validated["assignments"]["readme.md"] == "Miscellaneous"
-        assert validated["assignments"]["data.csv"] == "Miscellaneous"
-        assert "Miscellaneous" in validated["taxonomy"]
+        # .md has no extension category → "Other Files"; .csv → "Spreadsheets"
+        assert validated["assignments"]["readme.md"] == "Other Files"
+        assert validated["assignments"]["data.csv"] == "Spreadsheets"
 
     def test_filename_as_category_in_assignments_caught(self):
         """LLM returns a filename as category in assignments (not taxonomy)."""
@@ -289,8 +289,9 @@ class TestValidateResponse:
             },
         }
         validated = _validate_response(result, id_map, all_filenames)
-        assert validated["assignments"]["IMG_0019.HEIC"] == "Miscellaneous"
-        assert validated["assignments"]["notes.txt"] == "Miscellaneous"
+        # .HEIC → "Photos" (from extension), .txt → "Other Files" (no ext category)
+        assert validated["assignments"]["IMG_0019.HEIC"] == "Photos"
+        assert validated["assignments"]["notes.txt"] == "Other Files"
 
 
 class TestBadCategoryName:
@@ -300,11 +301,18 @@ class TestBadCategoryName:
         assert _is_bad_category_name("IMG_2034.jpg", filenames)
         assert _is_bad_category_name("script.py", filenames)
 
-    def test_rejects_category_thats_substring_of_filename(self):
-        filenames = {"Logo-Red_Hat-Engineering.eps"}
-        # Category is a substring of a filename (truncated filename)
+    def test_rejects_long_filename_stem_as_category(self):
+        filenames = {"Logo-Red_Hat-Engineering.eps", "Data Literacy Learning Paths.pdf"}
+        # Long filename stems (>= 8 chars) used as categories are rejected
         assert _is_bad_category_name("Logo-Red_Hat-Engineering", filenames)
-        assert _is_bad_category_name("Logo-Red_Hat", filenames)
+        assert _is_bad_category_name("Data Literacy Learning Paths", filenames)
+
+    def test_allows_short_filename_stem_as_category(self):
+        filenames = {"Aadhaar.pdf", "Code.zip", "Data.csv"}
+        # Short stems (< 8 chars) are legitimate category names
+        assert not _is_bad_category_name("Aadhaar", filenames)
+        assert not _is_bad_category_name("Code", filenames)
+        assert not _is_bad_category_name("Data", filenames)
 
     def test_does_not_reject_category_containing_filename(self):
         filenames = {"Code", "Research"}
@@ -321,42 +329,49 @@ class TestBadCategoryName:
         assert _is_bad_category_name("")
         assert _is_bad_category_name("a")
 
+    def test_rejects_generic_catchall_categories(self):
+        assert _is_bad_category_name("Documents")
+        assert _is_bad_category_name("Miscellaneous")
+        assert _is_bad_category_name("Other")
+        assert _is_bad_category_name("General")
+        assert _is_bad_category_name("Uncategorized")
+
     def test_accepts_valid_categories(self):
         filenames = {"report.pdf", "photo.jpg"}
-        assert not _is_bad_category_name("Documents", filenames)
         assert not _is_bad_category_name("Receipts & Invoices", filenames)
         assert not _is_bad_category_name("Code Projects", filenames)
         assert not _is_bad_category_name("Screenshots", filenames)
+        assert not _is_bad_category_name("Tax Documents", filenames)
 
 
 class TestNormalizeCategories:
     def test_merges_case_duplicates(self):
-        taxonomy = {"Documents": "docs", "documents": "also docs"}
-        assignments = {"a.txt": "Documents", "b.txt": "documents"}
+        taxonomy = {"Receipts": "payment records", "receipts": "also payment records"}
+        assignments = {"a.pdf": "Receipts", "b.pdf": "receipts"}
         norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
         assert len(norm_tax) == 1
-        assert "Documents" in norm_tax
-        assert norm_assign["a.txt"] == "Documents"
-        assert norm_assign["b.txt"] == "Documents"
+        assert "Receipts" in norm_tax
+        assert norm_assign["a.pdf"] == "Receipts"
+        assert norm_assign["b.pdf"] == "Receipts"
 
     def test_merges_substring_duplicates(self):
         taxonomy = {
-            "Documents": "text files",
-            "Text Documents": "also text files",
+            "Invoices": "billing documents",
+            "Tax Invoices": "also billing documents",
         }
-        assignments = {"a.txt": "Documents", "b.txt": "Text Documents"}
+        assignments = {"a.pdf": "Invoices", "b.pdf": "Tax Invoices"}
         norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
         assert len(norm_tax) == 1
-        assert "Documents" in norm_tax
-        assert norm_assign["b.txt"] == "Documents"
+        assert "Invoices" in norm_tax
+        assert norm_assign["b.pdf"] == "Invoices"
 
     def test_keeps_distinct_categories(self):
         taxonomy = {
-            "Documents": "text files",
+            "Receipts": "payment records",
             "Code": "source code",
             "Screenshots": "screen captures",
         }
-        assignments = {"a.txt": "Documents", "b.py": "Code"}
+        assignments = {"a.pdf": "Receipts", "b.py": "Code"}
         norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
         assert len(norm_tax) == 3
         assert norm_assign == assignments
@@ -370,7 +385,7 @@ class TestTaxonomyIO:
     def test_save_and_load(self, tmp_path):
         taxonomy = {
             "taxonomy": {
-                "Documents": "Text files and docs",
+                "Receipts": "Payment records and invoices",
                 "Code": "Source code files",
             }
         }
@@ -390,11 +405,11 @@ class TestCategorize:
         # LLM returns short IDs (f1, f2) — the categorizer maps them back
         engine.generate_json.return_value = {
             "taxonomy": {
-                "Documents": "Text documents",
+                "Project Notes": "Markdown notes and READMEs",
                 "Data Science": "ML and data files",
             },
             "assignments": {
-                "f1": "Documents",
+                "f1": "Project Notes",
                 "f2": "Data Science",
             },
         }
@@ -422,7 +437,7 @@ class TestCategorize:
 
         assert "taxonomy" in result
         assert "assignments" in result
-        assert result["assignments"]["readme.md"] == "Documents"
+        assert result["assignments"]["readme.md"] == "Project Notes"
         assert result["assignments"]["train.py"] == "Data Science"
 
         # Taxonomy should be saved
