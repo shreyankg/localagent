@@ -142,18 +142,25 @@ class Engine:
         messages: list[dict[str, str]],
         *,
         max_tokens: int | None = None,
-        retries: int = 1,
+        retries: int = 2,
     ) -> dict[str, Any]:
         """Generate and parse a JSON response from the model.
 
         Extracts JSON from the model output (handles markdown code fences),
-        validates it parses correctly, and retries once on failure.
+        validates it parses correctly, and retries on failure.
+
+        Retry strategy:
+        - 1st retry: append a correction hint so the model can fix near-misses.
+        - Subsequent retries: fresh attempt with original messages to avoid
+          bloating context with prior failed output.
 
         Raises ``ValueError`` if JSON cannot be extracted after retries.
         """
         last_error: Exception | None = None
+        total_attempts = 1 + retries
+        original_messages = messages
 
-        for attempt in range(1 + retries):
+        for attempt in range(total_attempts):
             raw = self.generate_text(messages, max_tokens=max_tokens)
 
             try:
@@ -163,13 +170,13 @@ class Engine:
                 logger.warning(
                     "JSON parse failed (attempt %d/%d): %s",
                     attempt + 1,
-                    1 + retries,
+                    total_attempts,
                     exc,
                 )
-                # On retry, append a correction hint
-                if attempt < retries:
+                if attempt == 0 and retries >= 1:
+                    # First retry: correction hint with failed output
                     messages = [
-                        *messages,
+                        *original_messages,
                         {"role": "assistant", "content": raw},
                         {
                             "role": "user",
@@ -179,9 +186,12 @@ class Engine:
                             ),
                         },
                     ]
+                else:
+                    # Subsequent retries: fresh attempt
+                    messages = original_messages
 
         raise ValueError(
-            f"Failed to get valid JSON after {1 + retries} attempts: {last_error}"
+            f"Failed to get valid JSON after {total_attempts} attempts: {last_error}"
         ) from last_error
 
     # -- helpers -------------------------------------------------------------
