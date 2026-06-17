@@ -12,6 +12,8 @@ from rich.logging import RichHandler
 from rich.table import Table
 
 from localagent.config import (
+    CONFIG_DIR,
+    LOG_DIR,
     USER_CONFIG_PATH,
     get_model_config,
     init_user_config,
@@ -234,6 +236,57 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reset(args: argparse.Namespace) -> int:
+    """Reset a skill by clearing its learned state and undo journals."""
+    import shutil
+
+    skill_name = args.skill
+    state_dir = CONFIG_DIR / skill_name
+    journal_pattern = f"{skill_name}-*.jsonl"
+
+    # Collect what exists
+    has_state = state_dir.exists() and any(state_dir.iterdir())
+    journals = list(LOG_DIR.glob(journal_pattern)) if LOG_DIR.exists() else []
+
+    if not has_state and not journals:
+        console.print(f"[yellow]Nothing to reset for '{skill_name}'.[/yellow]")
+        return 0
+
+    # Show what will be deleted
+    console.print(f"[bold]Will reset skill '{skill_name}':[/bold]")
+    if has_state:
+        for f in sorted(state_dir.iterdir()):
+            console.print(f"  [dim]state:[/dim]  {f}")
+    for j in sorted(journals):
+        console.print(f"  [dim]journal:[/dim] {j}")
+
+    # Confirm unless --force
+    if not args.force:
+        response = console.input("\n[bold]Proceed? [y/N]: [/bold]")
+        if response.strip().lower() not in ("y", "yes"):
+            console.print("[yellow]Aborted.[/yellow]")
+            return 0
+
+    # Delete state directory contents
+    removed = 0
+    if has_state:
+        for f in state_dir.iterdir():
+            if f.is_file():
+                f.unlink()
+                removed += 1
+            elif f.is_dir():
+                shutil.rmtree(f)
+                removed += 1
+
+    # Delete journal files
+    for j in journals:
+        j.unlink()
+        removed += 1
+
+    console.print(f"[green]Reset '{skill_name}': removed {removed} file(s).[/green]")
+    return 0
+
+
 # ── Argument parser ─────────────────────────────────────────────────────────
 
 
@@ -291,6 +344,17 @@ def build_parser() -> argparse.ArgumentParser:
     # list
     sub.add_parser("list", help="List available skills")
 
+    # reset
+    reset_parser = sub.add_parser(
+        "reset", help="Reset a skill (clear learned state and journals)"
+    )
+    reset_parser.add_argument("skill", help="Skill name (e.g. file-organizer)")
+    reset_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip confirmation prompt",
+    )
+
     # eval
     eval_parser = sub.add_parser("eval", help="Run evals against a skill")
     eval_parser.add_argument("skill", help="Skill name (e.g. file-organizer)")
@@ -336,6 +400,7 @@ def main() -> None:
         "unschedule": cmd_unschedule,
         "config": cmd_config,
         "list": cmd_list,
+        "reset": cmd_reset,
         "eval": cmd_eval,
     }
 
