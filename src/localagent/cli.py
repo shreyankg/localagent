@@ -47,8 +47,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     skill = registry.instantiate(args.skill, config)
     model_cfg = get_model_config(config)
+    model_path = args.model if args.model else model_cfg.get("model_path", "mlx-community/Llama-3.2-3B-Instruct-4bit")
     engine = Engine(
-        model_path=model_cfg.get("model_path", "mlx-community/Llama-3.2-3B-Instruct-4bit"),
+        model_path=model_path,
         max_tokens=model_cfg.get("max_tokens", 2048),
         temperature=model_cfg.get("temperature", 0.3),
     )
@@ -254,6 +255,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--auto",
         action="store_true",
         help="Auto-execute without confirmation (for cron)",
+    )
+    run_parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Override the model to use (e.g. mlx-community/gemma-2-9b-it-4bit)",
     )
 
     # undo
