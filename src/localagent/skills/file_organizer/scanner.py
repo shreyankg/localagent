@@ -77,8 +77,7 @@ _EXTENSION_CATEGORIES: dict[str, str] = {
     # Word-processor formats (specific name — "Documents" is too generic)
     ".doc": "Word Documents", ".docx": "Word Documents",
     ".odt": "Word Documents", ".rtf": "Word Documents",
-    # PDFs (fallback when content-based classification fails)
-    ".pdf": "PDF Documents",
+    # No .pdf mapping — PDFs must be classified by content (receipts, contracts, etc.)
     # Web pages
     ".html": "Web Pages", ".htm": "Web Pages",
 }

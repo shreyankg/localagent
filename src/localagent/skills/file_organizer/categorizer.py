@@ -389,6 +389,7 @@ _YAML_ARTIFACTS = frozenset({
     "category name",
     # Overly generic catch-all categories that prevent real classification
     "documents",
+    "pdf documents",
     "miscellaneous",
     "misc",
     "other",
