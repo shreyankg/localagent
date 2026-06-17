@@ -151,6 +151,9 @@ different category than a shell utility script.
 (e.g. screenshot, whatsapp, camera) or document type (e.g. payslip, invoice, \
 tax form). Use these to make better categorization decisions.
 - If a file's purpose is unclear, use a general category like "Miscellaneous".
+- NEVER use a filename as a category name. Categories must be generic \
+descriptive labels (e.g. "Photos", "Documents"), never specific filenames \
+(e.g. "IMG_0019.HEIC", "report.pdf").
 
 Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
 in your assignments.
@@ -175,10 +178,23 @@ categories from previous runs. New files need to be categorized.
 
 Your job:
 1. Review the existing taxonomy and the new files.
-2. Assign each new file to the most appropriate existing category.
-3. If a file doesn't fit any existing category well, you may propose a NEW \
-category — but only if it's genuinely distinct.
-4. Categories marked with "user_locked: true" must NOT be renamed or removed.
+2. Assign each new file to the MOST APPROPRIATE EXISTING category. \
+You MUST reuse existing categories wherever possible.
+3. Do NOT create renamed or rephrased versions of existing categories. \
+For example, if "Documents" exists, do NOT create "Text Documents" or \
+"Document Files" — use "Documents".
+4. Only create a genuinely NEW category if the file does not fit ANY \
+existing category at all — this should be rare.
+
+IMPORTANT rules:
+- Category names must be short, human-readable folder names \
+(e.g. "Receipts & Invoices", "Code Projects", "Screenshots").
+- Category names must NEVER be filenames, file extensions, or technical \
+artifacts.
+- Include ALL existing categories in the taxonomy, even if no new files \
+are assigned to them.
+- The taxonomy in your response must list every existing category plus \
+any new ones you add.
 
 Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
 in your assignments.
@@ -186,7 +202,7 @@ in your assignments.
 Respond with ONLY valid JSON in this exact format:
 {
   "taxonomy": {
-    "Existing Category": "description (keep as-is or update)",
+    "Existing Category": "description (keep as-is)",
     "New Category If Needed": "description",
     ...
   },
@@ -241,6 +257,25 @@ def _build_cold_messages(
     return messages, id_map
 
 
+def _format_taxonomy_list(taxonomy: dict[str, Any]) -> str:
+    """Format the taxonomy as a simple numbered list for the LLM prompt.
+
+    Using a plain list instead of YAML prevents the model from
+    reproducing YAML structural artifacts (like ``user_locked: true``)
+    as category names.
+    """
+    tax_dict = taxonomy.get("taxonomy", taxonomy)
+    lines: list[str] = []
+    for i, (name, desc) in enumerate(tax_dict.items(), 1):
+        # Only include the description string, not nested dicts
+        if isinstance(desc, dict):
+            desc_text = desc.get("description", str(desc))
+        else:
+            desc_text = str(desc)
+        lines.append(f"{i}. {name} — {desc_text}")
+    return "\n".join(lines)
+
+
 def _build_warm_messages(
     profiles: list[FileProfile],
     taxonomy: dict[str, Any],
@@ -250,16 +285,24 @@ def _build_warm_messages(
     Returns ``(messages, id_to_filename)``.
     """
     inventory, id_map = _build_file_inventory(profiles)
-    taxonomy_str = yaml.dump(
-        taxonomy.get("taxonomy", taxonomy),
-        default_flow_style=False,
-    )
+    taxonomy_str = _format_taxonomy_list(taxonomy)
+    num_categories = len(taxonomy.get("taxonomy", taxonomy))
+
+    cap_warning = ""
+    if num_categories >= _MAX_TAXONOMY_SIZE:
+        cap_warning = (
+            f"\n\nIMPORTANT: There are already {num_categories} categories. "
+            "Do NOT add new categories. Assign every file to an existing "
+            "category, using 'Miscellaneous' if nothing else fits."
+        )
+
     messages = [
         {"role": "system", "content": _WARM_SYSTEM},
         {
             "role": "user",
             "content": (
-                f"Existing taxonomy:\n```yaml\n{taxonomy_str}```\n\n"
+                f"Existing categories ({num_categories}):\n{taxonomy_str}"
+                f"{cap_warning}\n\n"
                 f"New files to categorize ({len(profiles)}):\n\n{inventory}"
             ),
         },
@@ -297,19 +340,150 @@ def _batch_profiles(
 
 # ── Validation ──────────────────────────────────────────────────────────────
 
+_YAML_ARTIFACTS = frozenset({
+    "true", "false", "null", "yes", "no", "user_locked: true",
+    "user_locked: false",
+})
+
+_MAX_TAXONOMY_SIZE = 15
+
+
+def _is_bad_category_name(
+    name: str,
+    known_filenames: set[str] | None = None,
+) -> bool:
+    """Return True if a category name looks like a filename or YAML artifact.
+
+    Bad names include:
+    - Exact matches or substrings of known filenames being processed
+    - YAML artifacts (e.g. ``true``, ``user_locked: true``)
+    - Very short or empty strings
+    """
+    stripped = name.strip()
+    if len(stripped) < 2:
+        return True
+    if stripped.lower() in _YAML_ARTIFACTS:
+        return True
+    # Check if the category name matches or looks like a known filename
+    # Only check if the category is a substring of a filename (i.e. it
+    # looks like a truncated/exact filename).  Do NOT check the reverse
+    # (filename in category) — that causes false positives like rejecting
+    # "Code Projects" because a file named "Code" exists.
+    if known_filenames:
+        for filename in known_filenames:
+            if stripped == filename or stripped in filename:
+                return True
+    return False
+
+
+def _normalize_categories(
+    taxonomy: dict[str, Any],
+    assignments: dict[str, str],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Merge near-duplicate category names in the taxonomy.
+
+    Detects duplicates via:
+    - Case-insensitive match (``Code`` vs ``code``)
+    - One name is a substring of another (``Documents`` vs ``Text Documents``)
+
+    The first-seen (canonical) name wins.  Assignments are updated to
+    point to the canonical name.
+
+    Returns ``(cleaned_taxonomy, updated_assignments)``.
+    """
+    if not taxonomy:
+        return taxonomy, assignments
+
+    # Build canonical mapping: lowercased → first-seen original name
+    canonical_map: dict[str, str] = {}  # lower_name → canonical_name
+    canonical_names: list[str] = []  # ordered list of canonical names
+
+    for name in taxonomy:
+        lower = name.strip().lower()
+        if lower in canonical_map:
+            # Exact case-insensitive duplicate
+            logger.info(
+                "Merging duplicate category '%s' → '%s'",
+                name,
+                canonical_map[lower],
+            )
+            continue
+        # Check substring containment with existing canonical names
+        merged = False
+        for existing_lower, existing_name in canonical_map.items():
+            if lower in existing_lower or existing_lower in lower:
+                logger.info(
+                    "Merging similar category '%s' → '%s'",
+                    name,
+                    existing_name,
+                )
+                canonical_map[lower] = existing_name
+                merged = True
+                break
+        if not merged:
+            canonical_map[lower] = name
+            canonical_names.append(name)
+
+    # Rebuild taxonomy with only canonical names
+    cleaned_taxonomy: dict[str, Any] = {}
+    for name in canonical_names:
+        cleaned_taxonomy[name] = taxonomy.get(name, "")
+
+    # Build reverse map: any name → canonical name
+    name_to_canonical: dict[str, str] = {}
+    for name in taxonomy:
+        lower = name.strip().lower()
+        name_to_canonical[name] = canonical_map.get(lower, name)
+
+    # Update assignments to use canonical names
+    updated_assignments: dict[str, str] = {}
+    for filename, category in assignments.items():
+        updated_assignments[filename] = name_to_canonical.get(category, category)
+
+    if len(cleaned_taxonomy) < len(taxonomy):
+        logger.info(
+            "Normalized taxonomy: %d → %d categories",
+            len(taxonomy),
+            len(cleaned_taxonomy),
+        )
+
+    return cleaned_taxonomy, updated_assignments
+
 
 def _validate_response(
     result: dict[str, Any],
     id_to_filename: dict[str, str],
+    all_filenames: set[str] | None = None,
 ) -> dict[str, Any]:
     """Validate LLM output and map short IDs back to real filenames.
 
     - Unknown IDs are dropped (the model hallucinated an ID).
     - Unknown categories are auto-added to the taxonomy rather than
       dropping the file, so no file is silently lost.
+    - Bad category names (filenames, YAML artifacts) are stripped from
+      the taxonomy and their files reassigned to ``Miscellaneous``.
+
+    ``all_filenames`` is the full set of filenames being processed
+    (across all batches) so we can detect the LLM echoing back a
+    filename as a category name.
     """
     taxonomy = result.get("taxonomy", {})
     assignments = result.get("assignments", {})
+
+    # Build filename set: current batch + any extras passed in
+    filenames = set(id_to_filename.values())
+    if all_filenames:
+        filenames |= all_filenames
+
+    # Strip bad taxonomy entries
+    bad_names: set[str] = set()
+    for cat_name in list(taxonomy):
+        if _is_bad_category_name(cat_name, filenames):
+            logger.warning(
+                "Removing bad category name: '%s'", cat_name,
+            )
+            bad_names.add(cat_name)
+            del taxonomy[cat_name]
 
     valid_assignments: dict[str, str] = {}
     for key, category in assignments.items():
@@ -318,6 +492,16 @@ def _validate_response(
         if filename is None:
             logger.warning("LLM returned unknown ID: '%s' — skipping", key)
             continue
+        # Reassign files from bad categories to Miscellaneous
+        if category in bad_names or _is_bad_category_name(category, filenames):
+            logger.info(
+                "Reassigning '%s' from bad category '%s' → 'Miscellaneous'",
+                filename,
+                category,
+            )
+            category = "Miscellaneous"
+            if "Miscellaneous" not in taxonomy:
+                taxonomy["Miscellaneous"] = "Uncategorized files"
         if category not in taxonomy:
             # Auto-add the category instead of dropping the file
             logger.info(
@@ -337,10 +521,12 @@ def _validate_response(
 def _merge_taxonomy(
     existing: dict[str, Any],
     new_result: dict[str, Any],
+    all_filenames: set[str] | None = None,
 ) -> dict[str, Any]:
     """Merge new LLM results into the existing taxonomy.
 
     User-locked categories are preserved unconditionally.
+    Bad category names are stripped from the merged result.
     """
     existing_tax = dict(existing.get("taxonomy", {}))
     new_tax = new_result.get("taxonomy", {})
@@ -352,6 +538,12 @@ def _merge_taxonomy(
 
     # Merge: new taxonomy wins for non-locked categories
     merged = {**existing_tax, **new_tax}
+
+    # Strip any bad category names that slipped through
+    for cat_name in list(merged):
+        if _is_bad_category_name(cat_name, all_filenames):
+            logger.warning("Stripping bad category from taxonomy: '%s'", cat_name)
+            del merged[cat_name]
 
     return {"taxonomy": merged}
 
@@ -415,6 +607,9 @@ def categorize(
     existing_taxonomy = load_taxonomy(state_dir)
     is_cold = existing_taxonomy is None
 
+    # Collect all filenames so validation can detect filename-as-category
+    all_known_filenames = {p.name for p in profiles}
+
     all_assignments: dict[str, str] = {}
     latest_taxonomy: dict[str, Any] = existing_taxonomy or {}
 
@@ -447,14 +642,16 @@ def categorize(
             )
             continue
 
-        result = _validate_response(result, id_map)
+        result = _validate_response(result, id_map, all_known_filenames)
 
         all_assignments.update(result.get("assignments", {}))
 
         if is_cold and i == 0:
             latest_taxonomy = result
         else:
-            latest_taxonomy = _merge_taxonomy(latest_taxonomy, result)
+            latest_taxonomy = _merge_taxonomy(
+                latest_taxonomy, result, all_known_filenames,
+            )
 
     if batch_errors:
         logger.warning(
@@ -463,6 +660,13 @@ def categorize(
             len(batches),
             sum(len(b) for b in batches) - len(all_assignments),
         )
+
+    # ── Normalize near-duplicate categories across batches ───────────
+    raw_taxonomy = latest_taxonomy.get("taxonomy", {})
+    normalized_tax, all_assignments = _normalize_categories(
+        raw_taxonomy, all_assignments,
+    )
+    latest_taxonomy = {"taxonomy": normalized_tax}
 
     # ── Auto-assign duplicates to the same category as their base ────
     for base_name, group in dup_groups.items():

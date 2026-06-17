@@ -15,6 +15,8 @@ from localagent.skills.file_organizer.scanner import (
     scan_directory,
 )
 from localagent.skills.file_organizer.categorizer import (
+    _is_bad_category_name,
+    _normalize_categories,
     _validate_response,
     categorize,
     load_taxonomy,
@@ -169,6 +171,116 @@ class TestValidateResponse:
         assert len(validated["assignments"]) == 2
         assert validated["assignments"]["readme.md"] == "Docs"
         assert validated["assignments"]["main.py"] == "Code"
+
+    def test_bad_category_names_stripped(self):
+        id_map = {"f1": "readme.md", "f2": "data.csv"}
+        all_filenames = {"readme.md", "data.csv", "report.pdf"}
+        result = {
+            "taxonomy": {
+                "Docs": "documents",
+                "report.pdf": "a bad filename category",
+                "true": "a YAML artifact",
+            },
+            "assignments": {
+                "f1": "report.pdf",
+                "f2": "true",
+            },
+        }
+        validated = _validate_response(result, id_map, all_filenames)
+        # Bad categories should be removed, files reassigned to Miscellaneous
+        assert "report.pdf" not in validated["taxonomy"]
+        assert "true" not in validated["taxonomy"]
+        assert validated["assignments"]["readme.md"] == "Miscellaneous"
+        assert validated["assignments"]["data.csv"] == "Miscellaneous"
+        assert "Miscellaneous" in validated["taxonomy"]
+
+    def test_filename_as_category_in_assignments_caught(self):
+        """LLM returns a filename as category in assignments (not taxonomy)."""
+        id_map = {"f1": "IMG_0019.HEIC", "f2": "notes.txt"}
+        all_filenames = {"IMG_0019.HEIC", "notes.txt", "schema.graphqls"}
+        result = {
+            "taxonomy": {"Photos": "photos"},
+            "assignments": {
+                "f1": "IMG_0019.HEIC",  # filename echoed back as category
+                "f2": "schema.graphqls",  # filename from another batch
+            },
+        }
+        validated = _validate_response(result, id_map, all_filenames)
+        assert validated["assignments"]["IMG_0019.HEIC"] == "Miscellaneous"
+        assert validated["assignments"]["notes.txt"] == "Miscellaneous"
+
+
+class TestBadCategoryName:
+    def test_rejects_exact_filename_match(self):
+        filenames = {"report.pdf", "IMG_2034.jpg", "script.py"}
+        assert _is_bad_category_name("report.pdf", filenames)
+        assert _is_bad_category_name("IMG_2034.jpg", filenames)
+        assert _is_bad_category_name("script.py", filenames)
+
+    def test_rejects_category_thats_substring_of_filename(self):
+        filenames = {"Logo-Red_Hat-Engineering.eps"}
+        # Category is a substring of a filename (truncated filename)
+        assert _is_bad_category_name("Logo-Red_Hat-Engineering", filenames)
+        assert _is_bad_category_name("Logo-Red_Hat", filenames)
+
+    def test_does_not_reject_category_containing_filename(self):
+        filenames = {"Code", "Research"}
+        # Filename appears inside a valid category — should NOT be rejected
+        assert not _is_bad_category_name("Code Projects", filenames)
+        assert not _is_bad_category_name("Research Papers", filenames)
+
+    def test_rejects_yaml_artifacts(self):
+        assert _is_bad_category_name("true")
+        assert _is_bad_category_name("false")
+        assert _is_bad_category_name("user_locked: true")
+
+    def test_rejects_short_strings(self):
+        assert _is_bad_category_name("")
+        assert _is_bad_category_name("a")
+
+    def test_accepts_valid_categories(self):
+        filenames = {"report.pdf", "photo.jpg"}
+        assert not _is_bad_category_name("Documents", filenames)
+        assert not _is_bad_category_name("Receipts & Invoices", filenames)
+        assert not _is_bad_category_name("Code Projects", filenames)
+        assert not _is_bad_category_name("Screenshots", filenames)
+
+
+class TestNormalizeCategories:
+    def test_merges_case_duplicates(self):
+        taxonomy = {"Documents": "docs", "documents": "also docs"}
+        assignments = {"a.txt": "Documents", "b.txt": "documents"}
+        norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
+        assert len(norm_tax) == 1
+        assert "Documents" in norm_tax
+        assert norm_assign["a.txt"] == "Documents"
+        assert norm_assign["b.txt"] == "Documents"
+
+    def test_merges_substring_duplicates(self):
+        taxonomy = {
+            "Documents": "text files",
+            "Text Documents": "also text files",
+        }
+        assignments = {"a.txt": "Documents", "b.txt": "Text Documents"}
+        norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
+        assert len(norm_tax) == 1
+        assert "Documents" in norm_tax
+        assert norm_assign["b.txt"] == "Documents"
+
+    def test_keeps_distinct_categories(self):
+        taxonomy = {
+            "Documents": "text files",
+            "Code": "source code",
+            "Screenshots": "screen captures",
+        }
+        assignments = {"a.txt": "Documents", "b.py": "Code"}
+        norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
+        assert len(norm_tax) == 3
+        assert norm_assign == assignments
+
+    def test_empty_taxonomy(self):
+        norm_tax, norm_assign = _normalize_categories({}, {"a.txt": "X"})
+        assert norm_tax == {}
 
 
 class TestTaxonomyIO:
