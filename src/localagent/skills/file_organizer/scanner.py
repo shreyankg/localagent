@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Extensions we can safely read as text for content preview
 _DEFAULT_TEXT_EXTENSIONS: frozenset[str] = frozenset({
     ".txt", ".md", ".markdown", ".rst", ".csv", ".tsv",
-    ".json", ".yaml", ".yml", ".toml", ".xml", ".html", ".htm",
+    ".json", ".jsonl", ".yaml", ".yml", ".toml", ".xml", ".html", ".htm",
     ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".c", ".cpp", ".h",
     ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".scala",
     ".sh", ".bash", ".zsh", ".fish",
@@ -25,7 +25,59 @@ _DEFAULT_TEXT_EXTENSIONS: frozenset[str] = frozenset({
     ".sql", ".r", ".R", ".m", ".tex", ".bib",
     ".log", ".ini", ".cfg", ".conf", ".env",
     ".gitignore", ".dockerignore",
+    # Plain-text formats often missed: emails, certs, calendar, vector graphics
+    ".eml", ".msg",
+    ".pem", ".crt", ".crl", ".cer", ".key",
+    ".ics",
+    ".svg",
+    ".graphqls", ".graphql", ".gql",
 })
+
+
+# ── Extension → suggested category ────────────────────────────────────────
+# Deterministic pre-classification for unambiguous extensions.  Stored as
+# hints["suggested_category"] so the LLM can still override when the
+# filename or content suggests something more specific.
+
+_EXTENSION_CATEGORIES: dict[str, str] = {
+    # Spreadsheets (NOT documents — they have tabular data)
+    ".csv": "Spreadsheets", ".tsv": "Spreadsheets",
+    ".xlsx": "Spreadsheets", ".xls": "Spreadsheets", ".ods": "Spreadsheets",
+    # Installers
+    ".dmg": "Installers", ".pkg": "Installers", ".msi": "Installers",
+    ".deb": "Installers", ".rpm": "Installers", ".snap": "Installers",
+    ".appimage": "Installers",
+    # Emails
+    ".eml": "Emails", ".msg": "Emails",
+    # Photos / Images
+    ".heic": "Photos", ".jpg": "Photos", ".jpeg": "Photos",
+    ".png": "Photos", ".gif": "Photos", ".bmp": "Photos",
+    ".tiff": "Photos", ".tif": "Photos", ".webp": "Photos",
+    ".svg": "Photos", ".eps": "Photos", ".raw": "Photos",
+    # Videos
+    ".mp4": "Videos", ".mov": "Videos", ".mkv": "Videos",
+    ".avi": "Videos", ".wmv": "Videos", ".flv": "Videos",
+    ".webm": "Videos",
+    # Music / Audio
+    ".mp3": "Music", ".wav": "Music", ".flac": "Music",
+    ".aac": "Music", ".ogg": "Music", ".m4a": "Music", ".wma": "Music",
+    # Archives
+    ".zip": "Archives", ".tar": "Archives", ".gz": "Archives",
+    ".bz2": "Archives", ".xz": "Archives", ".rar": "Archives",
+    ".7z": "Archives",
+    # Calendar
+    ".ics": "Calendar Events",
+    # Certificates / Security
+    ".pem": "Certificates", ".crt": "Certificates", ".crl": "Certificates",
+    ".cer": "Certificates", ".key": "Certificates", ".p12": "Certificates",
+    ".pfx": "Certificates", ".pkpass": "Certificates",
+    # Presentations
+    ".pptx": "Presentations", ".ppt": "Presentations",
+    ".odp": "Presentations", ".key": "Presentations",
+    # Documents (word-processor formats)
+    ".doc": "Documents", ".docx": "Documents", ".odt": "Documents",
+    ".rtf": "Documents",
+}
 
 
 # ── Filename pattern recognition ──────────────────────────────────────────
@@ -337,6 +389,12 @@ def scan_directory(
 
         # Detect filename hints (screenshots, duplicates, doc types, etc.)
         hints = detect_filename_hints(name)
+
+        # Extension-based suggested category (deterministic pre-classification)
+        ext_lower = entry.suffix.lower()
+        suggested = _EXTENSION_CATEGORIES.get(ext_lower)
+        if suggested and "suggested_category" not in hints:
+            hints["suggested_category"] = suggested
 
         profile = FileProfile(
             name=name,

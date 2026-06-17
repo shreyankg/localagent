@@ -156,6 +156,9 @@ different category than a shell utility script.
 - Pay attention to the "hints" field — it tells you the file's likely source \
 (e.g. screenshot, whatsapp, camera) or document type (e.g. payslip, invoice, \
 tax form). Use these to make better categorization decisions.
+- When a file has a "suggested_category" hint, USE that category as-is unless \
+the filename or content preview strongly suggests a more specific one. The \
+suggested_category is derived from the file extension and is reliable.
 - If a file's purpose is unclear, use a general category like "Miscellaneous".
 - NEVER use a filename as a category name. Categories must be generic \
 descriptive labels (e.g. "Photos", "Documents"), never specific filenames \
@@ -203,6 +206,10 @@ IMPORTANT rules:
   .mp3/.wav/.flac → Music, .zip/.tar.gz/.rar → Archives, \
   .pdf/.doc/.docx → Documents, .ics → Calendar.
   Use extensions as a starting point, then refine with content and context.
+- When a file has a "suggested_category" hint, USE that category as-is unless \
+the filename or content preview strongly suggests a more specific one. The \
+suggested_category is derived from the file extension and is reliable. \
+If the suggested category matches an existing category, use the existing one.
 - Category names must be short, human-readable folder names \
 (e.g. "Receipts & Invoices", "Code Projects", "Screenshots").
 - Category names must NEVER be filenames, file extensions, or technical \
@@ -222,7 +229,7 @@ Respond with ONLY valid JSON in this exact format:
 {
   "taxonomy": {
     "Existing Category": "description (keep as-is)",
-    "New Category If Needed": "description",
+    "...": "(add only if truly needed)",
     ...
   },
   "assignments": {
@@ -362,6 +369,11 @@ def _batch_profiles(
 _YAML_ARTIFACTS = frozenset({
     "true", "false", "null", "yes", "no", "user_locked: true",
     "user_locked: false",
+    # Prompt placeholders the model sometimes reproduces verbatim
+    "new category if needed",
+    "add only if truly needed",
+    "existing category",
+    "category name",
 })
 
 _MAX_TAXONOMY_SIZE = 15
