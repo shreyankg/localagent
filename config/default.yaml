@@ -12,8 +12,8 @@ skills:
   file-organizer:
     # Directories to organize (expanded at runtime)
     watch_directories:
-      - "~/Desktop"
       - "~/Downloads"
+      - "~/Documents"
 
     # Glob patterns to exclude from scanning
     exclude_patterns:
