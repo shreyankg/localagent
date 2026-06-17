@@ -130,40 +130,45 @@ class TestScanner:
 
 
 class TestValidateResponse:
-    def test_drops_hallucinated_files(self):
+    def test_drops_unknown_ids(self):
+        id_map = {"f1": "real.txt"}
         result = {
             "taxonomy": {"Docs": "documents"},
             "assignments": {
-                "real.txt": "Docs",
-                "fake.txt": "Docs",
+                "f1": "Docs",
+                "f99": "Docs",  # unknown ID
             },
         }
-        validated = _validate_response(result, known_files={"real.txt"})
+        validated = _validate_response(result, id_map)
         assert "real.txt" in validated["assignments"]
-        assert "fake.txt" not in validated["assignments"]
+        assert len(validated["assignments"]) == 1
 
-    def test_drops_unknown_categories(self):
+    def test_auto_adds_unknown_categories(self):
+        id_map = {"f1": "file.txt"}
         result = {
             "taxonomy": {"Docs": "documents"},
             "assignments": {
-                "file.txt": "NonexistentCategory",
+                "f1": "NonexistentCategory",
             },
         }
-        validated = _validate_response(result, known_files={"file.txt"})
-        assert "file.txt" not in validated["assignments"]
+        validated = _validate_response(result, id_map)
+        # File should NOT be dropped; category auto-added instead
+        assert "file.txt" in validated["assignments"]
+        assert "NonexistentCategory" in validated["taxonomy"]
 
     def test_valid_assignments_kept(self):
+        id_map = {"f1": "readme.md", "f2": "main.py"}
         result = {
             "taxonomy": {"Docs": "documents", "Code": "source code"},
             "assignments": {
-                "readme.md": "Docs",
-                "main.py": "Code",
+                "f1": "Docs",
+                "f2": "Code",
             },
         }
-        validated = _validate_response(
-            result, known_files={"readme.md", "main.py"}
-        )
+        validated = _validate_response(result, id_map)
         assert len(validated["assignments"]) == 2
+        assert validated["assignments"]["readme.md"] == "Docs"
+        assert validated["assignments"]["main.py"] == "Code"
 
 
 class TestTaxonomyIO:
@@ -187,14 +192,15 @@ class TestCategorize:
     def test_cold_start_categorization(self, MockEngine, tmp_path):
         """Test first-run categorization with mocked LLM."""
         engine = MagicMock()
+        # LLM returns short IDs (f1, f2) — the categorizer maps them back
         engine.generate_json.return_value = {
             "taxonomy": {
                 "Documents": "Text documents",
                 "Data Science": "ML and data files",
             },
             "assignments": {
-                "readme.md": "Documents",
-                "train.py": "Data Science",
+                "f1": "Documents",
+                "f2": "Data Science",
             },
         }
 

@@ -152,6 +152,9 @@ different category than a shell utility script.
 tax form). Use these to make better categorization decisions.
 - If a file's purpose is unclear, use a general category like "Miscellaneous".
 
+Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
+in your assignments.
+
 Respond with ONLY valid JSON in this exact format:
 {
   "taxonomy": {
@@ -159,7 +162,8 @@ Respond with ONLY valid JSON in this exact format:
     ...
   },
   "assignments": {
-    "filename.ext": "Category Name",
+    "f1": "Category Name",
+    "f2": "Category Name",
     ...
   }
 }
@@ -176,6 +180,9 @@ Your job:
 category — but only if it's genuinely distinct.
 4. Categories marked with "user_locked: true" must NOT be renamed or removed.
 
+Each file has a short ID (like "f1", "f2").  Use these IDs — not filenames — \
+in your assignments.
+
 Respond with ONLY valid JSON in this exact format:
 {
   "taxonomy": {
@@ -184,23 +191,45 @@ Respond with ONLY valid JSON in this exact format:
     ...
   },
   "assignments": {
-    "new_filename.ext": "Category Name",
+    "f1": "Category Name",
+    "f2": "Category Name",
     ...
   }
 }
 """
 
 
-def _build_file_inventory(profiles: list[FileProfile]) -> str:
-    """Format file profiles into a text block for the LLM prompt."""
-    summaries = [p.to_summary() for p in profiles]
-    return json.dumps(summaries, indent=2)
+def _build_file_inventory(
+    profiles: list[FileProfile],
+) -> tuple[str, dict[str, str]]:
+    """Format file profiles into a text block for the LLM prompt.
+
+    Each file gets a short ID (``f1``, ``f2``, …) to avoid asking the
+    LLM to reproduce long filenames verbatim.
+
+    Returns ``(inventory_text, id_to_filename)`` where *id_to_filename*
+    maps the short IDs back to real filenames.
+    """
+    id_to_filename: dict[str, str] = {}
+    summaries: list[dict[str, Any]] = []
+    for idx, p in enumerate(profiles):
+        fid = f"f{idx + 1}"
+        id_to_filename[fid] = p.name
+        summary = p.to_summary()
+        summary["id"] = fid
+        summaries.append(summary)
+    return json.dumps(summaries, indent=2), id_to_filename
 
 
-def _build_cold_messages(profiles: list[FileProfile]) -> list[dict[str, str]]:
-    """Build messages for a first-run (no existing taxonomy)."""
-    inventory = _build_file_inventory(profiles)
-    return [
+def _build_cold_messages(
+    profiles: list[FileProfile],
+) -> tuple[list[dict[str, str]], dict[str, str]]:
+    """Build messages for a first-run (no existing taxonomy).
+
+    Returns ``(messages, id_to_filename)``.
+    """
+    inventory, id_map = _build_file_inventory(profiles)
+    messages = [
         {"role": "system", "content": _COLD_START_SYSTEM},
         {
             "role": "user",
@@ -209,19 +238,23 @@ def _build_cold_messages(profiles: list[FileProfile]) -> list[dict[str, str]]:
             ),
         },
     ]
+    return messages, id_map
 
 
 def _build_warm_messages(
     profiles: list[FileProfile],
     taxonomy: dict[str, Any],
-) -> list[dict[str, str]]:
-    """Build messages for a subsequent run with an existing taxonomy."""
-    inventory = _build_file_inventory(profiles)
+) -> tuple[list[dict[str, str]], dict[str, str]]:
+    """Build messages for a subsequent run with an existing taxonomy.
+
+    Returns ``(messages, id_to_filename)``.
+    """
+    inventory, id_map = _build_file_inventory(profiles)
     taxonomy_str = yaml.dump(
         taxonomy.get("taxonomy", taxonomy),
         default_flow_style=False,
     )
-    return [
+    messages = [
         {"role": "system", "content": _WARM_SYSTEM},
         {
             "role": "user",
@@ -231,11 +264,12 @@ def _build_warm_messages(
             ),
         },
     ]
+    return messages, id_map
 
 
 # ── Batching ────────────────────────────────────────────────────────────────
 
-_BATCH_SIZE = 80  # max files per LLM call
+_BATCH_SIZE = 40  # max files per LLM call
 
 
 def _batch_profiles(
@@ -266,25 +300,32 @@ def _batch_profiles(
 
 def _validate_response(
     result: dict[str, Any],
-    known_files: set[str],
+    id_to_filename: dict[str, str],
 ) -> dict[str, Any]:
-    """Validate LLM output: drop hallucinated filenames, warn on mismatches."""
+    """Validate LLM output and map short IDs back to real filenames.
+
+    - Unknown IDs are dropped (the model hallucinated an ID).
+    - Unknown categories are auto-added to the taxonomy rather than
+      dropping the file, so no file is silently lost.
+    """
     taxonomy = result.get("taxonomy", {})
     assignments = result.get("assignments", {})
 
-    # Drop assignments for files that don't exist
     valid_assignments: dict[str, str] = {}
-    for filename, category in assignments.items():
-        if filename not in known_files:
-            logger.warning("LLM hallucinated file: '%s' — skipping", filename)
+    for key, category in assignments.items():
+        # Map ID → filename
+        filename = id_to_filename.get(key)
+        if filename is None:
+            logger.warning("LLM returned unknown ID: '%s' — skipping", key)
             continue
         if category not in taxonomy:
-            logger.warning(
-                "File '%s' assigned to unknown category '%s' — skipping",
-                filename,
+            # Auto-add the category instead of dropping the file
+            logger.info(
+                "Auto-adding category '%s' (used by '%s' but not in taxonomy)",
                 category,
+                filename,
             )
-            continue
+            taxonomy[category] = "Auto-added category"
         valid_assignments[filename] = category
 
     return {
@@ -360,15 +401,17 @@ def categorize(
             len(group) - 1,
         )
 
-    # Only send unique files to the LLM
-    unique_profiles = [p for p in profiles if p.name not in dup_filenames]
+    # Only send unique files to the LLM (filter from profiles_to_process,
+    # not the full profiles list, to avoid re-sending cached files)
+    unique_profiles = [
+        p for p in profiles_to_process if p.name not in dup_filenames
+    ]
     logger.info(
         "Sending %d unique files to LLM (%d duplicates will auto-assign)",
         len(unique_profiles),
         len(dup_filenames),
     )
 
-    known_files = {p.name for p in unique_profiles}
     existing_taxonomy = load_taxonomy(state_dir)
     is_cold = existing_taxonomy is None
 
@@ -376,6 +419,7 @@ def categorize(
     latest_taxonomy: dict[str, Any] = existing_taxonomy or {}
 
     batches = _batch_profiles(unique_profiles)
+    batch_errors = 0
 
     for i, batch in enumerate(batches):
         logger.info(
@@ -386,12 +430,24 @@ def categorize(
         )
 
         if is_cold and i == 0:
-            messages = _build_cold_messages(batch)
+            messages, id_map = _build_cold_messages(batch)
         else:
-            messages = _build_warm_messages(batch, latest_taxonomy)
+            messages, id_map = _build_warm_messages(batch, latest_taxonomy)
 
-        result = engine.generate_json(messages, max_tokens=4096)
-        result = _validate_response(result, known_files)
+        try:
+            result = engine.generate_json(messages, max_tokens=4096)
+        except ValueError as exc:
+            batch_errors += 1
+            logger.error(
+                "Batch %d/%d failed: %s — skipping %d files",
+                i + 1,
+                len(batches),
+                exc,
+                len(batch),
+            )
+            continue
+
+        result = _validate_response(result, id_map)
 
         all_assignments.update(result.get("assignments", {}))
 
@@ -399,6 +455,14 @@ def categorize(
             latest_taxonomy = result
         else:
             latest_taxonomy = _merge_taxonomy(latest_taxonomy, result)
+
+    if batch_errors:
+        logger.warning(
+            "%d/%d batches failed — %d files were not categorized",
+            batch_errors,
+            len(batches),
+            sum(len(b) for b in batches) - len(all_assignments),
+        )
 
     # ── Auto-assign duplicates to the same category as their base ────
     for base_name, group in dup_groups.items():
