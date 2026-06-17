@@ -11,6 +11,7 @@ from localagent.core.safefs import SafeFS
 from localagent.core.skill import Action
 from localagent.skills.file_organizer.scanner import (
     FileProfile,
+    _extract_pdf_text,
     scan_all,
     scan_directory,
 )
@@ -126,6 +127,88 @@ class TestScanner:
             assert "extension" in summary
             assert "mime_type" in summary
             assert "size" in summary
+
+
+# ── PDF extraction tests ──────────────────────────────────────────────────
+
+
+class TestPdfExtraction:
+    def test_returns_none_when_pymupdf_missing(self, tmp_path):
+        """Without pymupdf installed, extraction gracefully returns None."""
+        pdf = tmp_path / "test.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake content")
+        with patch.dict("sys.modules", {"fitz": None}):
+            result = _extract_pdf_text(pdf, max_bytes=512)
+        assert result is None
+
+    def test_returns_none_for_corrupt_pdf(self, tmp_path):
+        """Corrupt/non-PDF files should return None without raising."""
+        bad_pdf = tmp_path / "corrupt.pdf"
+        bad_pdf.write_bytes(b"this is not a real PDF at all")
+        result = _extract_pdf_text(bad_pdf, max_bytes=512)
+        # Either None (no pymupdf) or None (extraction fails on garbage)
+        assert result is None
+
+    def test_extracts_text_when_pymupdf_available(self, tmp_path):
+        """If pymupdf is installed, verify it extracts text from a real PDF."""
+        try:
+            import fitz
+        except ImportError:
+            pytest.skip("pymupdf not installed")
+
+        # Create a minimal real PDF with text
+        pdf_path = tmp_path / "sample.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Invoice #12345\nAmount: $500.00")
+        doc.save(str(pdf_path))
+        doc.close()
+
+        result = _extract_pdf_text(pdf_path, max_bytes=512)
+        assert result is not None
+        assert "Invoice" in result
+        assert "12345" in result
+
+    def test_respects_max_bytes(self, tmp_path):
+        """Extracted text should be capped at max_bytes."""
+        try:
+            import fitz
+        except ImportError:
+            pytest.skip("pymupdf not installed")
+
+        pdf_path = tmp_path / "long.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        long_text = "A" * 2000
+        page.insert_text((72, 72), long_text)
+        doc.save(str(pdf_path))
+        doc.close()
+
+        result = _extract_pdf_text(pdf_path, max_bytes=100)
+        assert result is not None
+        assert len(result) <= 100
+
+    def test_scan_directory_uses_pdf_extraction(self, tmp_path):
+        """PDF files in scan_directory should get content_preview when pymupdf is available."""
+        try:
+            import fitz
+        except ImportError:
+            pytest.skip("pymupdf not installed")
+
+        pdf_path = tmp_path / "invoice.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Payment receipt for services")
+        doc.save(str(pdf_path))
+        doc.close()
+
+        safefs = SafeFS(allowed_paths=[tmp_path], permissions={"read"})
+        profiles = scan_directory(safefs, tmp_path)
+        by_name = {p.name: p for p in profiles}
+
+        assert "invoice.pdf" in by_name
+        assert by_name["invoice.pdf"].content_preview is not None
+        assert "Payment" in by_name["invoice.pdf"].content_preview
 
 
 # ── Categorizer tests ──────────────────────────────────────────────────────

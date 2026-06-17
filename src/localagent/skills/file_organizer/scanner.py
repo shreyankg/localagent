@@ -317,6 +317,39 @@ def _is_text_readable(path: Path, text_extensions: frozenset[str] | None = None)
     return path.suffix.lower() in exts
 
 
+def _extract_pdf_text(path: Path, max_bytes: int = 512) -> str | None:
+    """Extract text from the first page(s) of a PDF for content preview.
+
+    Uses ``pymupdf`` (``fitz``) if installed; returns ``None`` silently if the
+    library is missing or extraction fails.  This keeps PDF preview as a
+    best-effort enhancement — the scanner works without it.
+    """
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        return None
+
+    try:
+        doc = fitz.open(str(path))
+        text_parts: list[str] = []
+        collected = 0
+        for page in doc:
+            page_text = page.get_text().strip()
+            if page_text:
+                text_parts.append(page_text)
+                collected += len(page_text)
+                if collected >= max_bytes:
+                    break
+        doc.close()
+        if not text_parts:
+            return None
+        full = "\n".join(text_parts)
+        return full[:max_bytes] if len(full) > max_bytes else full
+    except Exception as exc:
+        logger.debug("Cannot extract PDF text from %s: %s", path.name, exc)
+        return None
+
+
 def _should_exclude(name: str, exclude_patterns: list[str], skip_hidden: bool) -> bool:
     """Check if a filename matches any exclusion rule."""
     if skip_hidden and name.startswith("."):
@@ -386,6 +419,10 @@ def scan_directory(
             except Exception as exc:
                 logger.debug("Cannot read %s for preview: %s", name, exc)
                 content_preview = None
+
+        # PDF text extraction (optional, requires pymupdf)
+        if content_preview is None and entry.suffix.lower() == ".pdf":
+            content_preview = _extract_pdf_text(entry, max_bytes=content_preview_bytes)
 
         # Detect filename hints (screenshots, duplicates, doc types, etc.)
         hints = detect_filename_hints(name)

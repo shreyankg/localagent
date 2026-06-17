@@ -15,6 +15,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pdf = [
+    "pymupdf>=1.24.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-tmp-files>=0.0.2",
