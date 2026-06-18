@@ -306,13 +306,27 @@ class TestBadCategoryName:
         # Long filename stems (>= 8 chars) used as categories are rejected
         assert _is_bad_category_name("Logo-Red_Hat-Engineering", filenames)
         assert _is_bad_category_name("Data Literacy Learning Paths", filenames)
+        # Case-insensitive stem matching
+        assert _is_bad_category_name("data literacy learning paths", filenames)
+
+    def test_rejects_long_substring_of_filename(self):
+        filenames = {"Logo-Red_Hat-Engineering.eps", "Airtel Black Statement.pdf"}
+        # Category (>= 6 chars) that is a substring of a filename
+        assert _is_bad_category_name("Logo-Red_Hat", filenames)
+        assert _is_bad_category_name("Airtel Black", filenames)
+
+    def test_rejects_medium_filename_stem_as_category(self):
+        filenames = {"Aadhaar.pdf", "VFS GLOBAL.pdf"}
+        # Stems >= 6 chars that match a filename are too specific
+        assert _is_bad_category_name("Aadhaar", filenames)
+        assert _is_bad_category_name("VFS GLOBAL", filenames)
 
     def test_allows_short_filename_stem_as_category(self):
-        filenames = {"Aadhaar.pdf", "Code.zip", "Data.csv"}
-        # Short stems (< 8 chars) are legitimate category names
-        assert not _is_bad_category_name("Aadhaar", filenames)
+        filenames = {"Code.zip", "Data.csv", "Music.tar"}
+        # Short stems (< 6 chars) are legitimate category names
         assert not _is_bad_category_name("Code", filenames)
         assert not _is_bad_category_name("Data", filenames)
+        assert not _is_bad_category_name("Music", filenames)
 
     def test_does_not_reject_category_containing_filename(self):
         filenames = {"Code", "Research"}

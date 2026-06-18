@@ -420,17 +420,24 @@ def _is_bad_category_name(
     if stripped.lower() in _YAML_ARTIFACTS:
         return True
     if known_filenames:
+        lower = stripped.lower()
         for filename in known_filenames:
             # Exact filename match (e.g. "report.pdf" as category)
-            if stripped == filename:
+            if lower == filename.lower():
                 return True
-            # Category matches filename stem exactly, and stem is long
-            # enough to be a specific filename rather than a general
-            # concept.  Short stems like "Code", "Data", "Aadhaar" are
-            # legitimate category names; "Data Literacy Learning Paths"
-            # is clearly a filename stem being echoed back.
+            # Category matches filename stem (case-insensitive), and
+            # stem is long enough to be a specific name rather than a
+            # generic concept.  Short stems like "Code", "Data" are
+            # legitimate category names; "Aadhaar", "VFS GLOBAL" are
+            # too specific.
             stem = Path(filename).stem
-            if stripped == stem and len(stem) >= 8:
+            if len(stem) >= 6 and lower == stem.lower():
+                return True
+            # Category is a long substring of a filename — catches
+            # partial filename echoes like "Logo-Red_Hat" appearing
+            # inside "Logo-Red_Hat-Engineering.eps".  The length
+            # threshold avoids false positives on short words.
+            if len(stripped) >= 6 and lower in filename.lower():
                 return True
     return False
 
