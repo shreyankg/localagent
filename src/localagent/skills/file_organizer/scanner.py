@@ -142,61 +142,91 @@ _FILENAME_PATTERNS: list[tuple[re.Pattern[str], dict[str, str]]] = [
     # Payslips
     (
         re.compile(r"(?i)^payslip[_\s-]"),
-        {"doc_type": "payslip"},
+        {"doc_type": "payslip", "suggested_category": "Pay Statements"},
+    ),
+    # Pay statements (broader than payslip)
+    (
+        re.compile(r"(?i)pay[_\s-]?statement"),
+        {"doc_type": "pay-statement", "suggested_category": "Pay Statements"},
     ),
     # Rent receipts
     (
         re.compile(r"(?i)rent[_\s-]?rec(?:ei|ie)pt"),
-        {"doc_type": "rent-receipt"},
+        {"doc_type": "rent-receipt", "suggested_category": "Receipts & Invoices"},
     ),
     # Indian tax Form 16
     (
         re.compile(r"(?i)form\s*16"),
-        {"doc_type": "tax-form-16"},
+        {"doc_type": "tax-form-16", "suggested_category": "Tax Documents"},
     ),
     # Aadhaar
     (
         re.compile(r"(?i)(?:e?aadhaar|EAadhaar)"),
-        {"doc_type": "aadhaar-id"},
+        {"doc_type": "aadhaar-id", "suggested_category": "Identity Documents"},
     ),
     # PAN Card
     (
         re.compile(r"(?i)^PAN[_\s-]?Card"),
-        {"doc_type": "pan-card"},
+        {"doc_type": "pan-card", "suggested_category": "Identity Documents"},
     ),
     # Telecom / internet bills (common Indian providers)
     (
         re.compile(r"(?i)(?:VIL|Jio|Airtel|BSNL|ACT)[_\s-].*(?:bill|invoice)", re.IGNORECASE),
-        {"doc_type": "telecom-bill"},
+        {"doc_type": "telecom-bill", "suggested_category": "Bills & Statements"},
     ),
     # Credit card statements
     (
         re.compile(r"(?i)(?:CC|credit[_\s-]?card)[_\s-]?statement"),
-        {"doc_type": "credit-card-statement"},
+        {"doc_type": "credit-card-statement", "suggested_category": "Bills & Statements"},
     ),
     # Mutual fund / investment statements
     (
         re.compile(r"(?i)(?:mutual\s*fund|CAS)[_\s-]?statement"),
-        {"doc_type": "investment-statement"},
+        {"doc_type": "investment-statement", "suggested_category": "Bills & Statements"},
     ),
     # Insurance policies
     (
         re.compile(r"(?i)insurance[_\s-]?polic"),
-        {"doc_type": "insurance-policy"},
+        {"doc_type": "insurance-policy", "suggested_category": "Insurance"},
     ),
     # Recovery / backup codes (2FA, MFA, etc.)
     (
         re.compile(r"(?i)(?:recovery|backup)[_\s-]?codes?"),
         {"doc_type": "recovery-codes", "suggested_category": "Security & Credentials"},
     ),
+    # Purchase orders
+    (
+        re.compile(r"(?i)^PO[_-]"),
+        {"doc_type": "purchase-order", "suggested_category": "Receipts & Invoices"},
+    ),
+    # Quotations
+    (
+        re.compile(r"(?i)(?:^|\b)quotation"),
+        {"doc_type": "quotation", "suggested_category": "Receipts & Invoices"},
+    ),
+    # Proforma invoices
+    (
+        re.compile(r"(?i)(?:^|\b)proforma"),
+        {"doc_type": "proforma-invoice", "suggested_category": "Receipts & Invoices"},
+    ),
+    # Resignation / HR letters
+    (
+        re.compile(r"(?i)(?:^|\b)resignation"),
+        {"doc_type": "resignation-letter", "suggested_category": "HR Documents"},
+    ),
+    # Policy documents
+    (
+        re.compile(r"(?i)(?:^|\b)policy\b.*\.(?:pdf|docx?)$"),
+        {"doc_type": "policy-document", "suggested_category": "Policies & Guidelines"},
+    ),
     # Generic invoice / bill patterns
     (
         re.compile(r"(?i)(?:^|\b)invoice"),
-        {"doc_type": "invoice"},
+        {"doc_type": "invoice", "suggested_category": "Receipts & Invoices"},
     ),
     (
         re.compile(r"(?i)(?:^|\b)receipt"),
-        {"doc_type": "receipt"},
+        {"doc_type": "receipt", "suggested_category": "Receipts & Invoices"},
     ),
 ]
 
