@@ -350,6 +350,20 @@ class TestBadCategoryName:
         assert _is_bad_category_name("General")
         assert _is_bad_category_name("Uncategorized")
 
+    def test_rejects_too_long_category_names(self):
+        long_name = "This Is Way Too Long To Be A Real Category Name Surely"
+        assert _is_bad_category_name(long_name)
+
+    def test_rejects_url_style_category_names(self):
+        assert _is_bad_category_name("downloadbill?siNumber=123")
+        assert _is_bad_category_name("file/path/thing")
+        assert _is_bad_category_name("key=value")
+
+    def test_rejects_category_containing_filename(self):
+        filenames = {"report.pdf", "data.csv"}
+        # Category that embeds a full filename (with extension)
+        assert _is_bad_category_name("Files like report.pdf", filenames)
+
     def test_accepts_valid_categories(self):
         filenames = {"report.pdf", "photo.jpg"}
         assert not _is_bad_category_name("Receipts & Invoices", filenames)

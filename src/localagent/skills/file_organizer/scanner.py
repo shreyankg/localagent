@@ -184,6 +184,11 @@ _FILENAME_PATTERNS: list[tuple[re.Pattern[str], dict[str, str]]] = [
         re.compile(r"(?i)insurance[_\s-]?polic"),
         {"doc_type": "insurance-policy"},
     ),
+    # Recovery / backup codes (2FA, MFA, etc.)
+    (
+        re.compile(r"(?i)(?:recovery|backup)[_\s-]?codes?"),
+        {"doc_type": "recovery-codes", "suggested_category": "Security & Credentials"},
+    ),
     # Generic invoice / bill patterns
     (
         re.compile(r"(?i)(?:^|\b)invoice"),

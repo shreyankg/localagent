@@ -426,14 +426,24 @@ def _is_bad_category_name(
 
     Bad names include:
     - Exact matches of known filenames (e.g. ``report.pdf``)
-    - Filename stems that are long enough to be specific (>= 8 chars),
+    - Filename stems that are long enough to be specific (>= 6 chars),
       suggesting the LLM echoed a filename without its extension
     - YAML artifacts (e.g. ``true``, ``user_locked: true``)
     - Generic catch-all categories (e.g. ``Documents``, ``Miscellaneous``)
     - Very short or empty strings
+    - Too-long strings (> 40 chars) — real categories are short labels
+    - Strings with URL/path characters (``?``, ``=``, ``&``, ``/``, ``\\``)
     """
     stripped = name.strip()
     if len(stripped) < 2:
+        return True
+    # Too long to be a category name — likely a filename or URL
+    if len(stripped) > 40:
+        return True
+    # URL/path characters don't belong in category names
+    # Note: '&' is excluded — it appears in valid categories like
+    # "Receipts & Invoices".
+    if any(c in stripped for c in "?=/\\"):
         return True
     if stripped.lower() in _YAML_ARTIFACTS:
         return True
@@ -456,6 +466,16 @@ def _is_bad_category_name(
             # inside "Logo-Red_Hat-Engineering.eps".  The length
             # threshold avoids false positives on short words.
             if len(stripped) >= 6 and lower in filename.lower():
+                return True
+            # Reverse: filename (with extension) is a substring of the
+            # category — catches the LLM wrapping a filename in extra
+            # text.  Only applies to filenames with extensions to avoid
+            # false positives on bare words like "Code" or "Research".
+            if (
+                len(filename) >= 5
+                and "." in filename
+                and filename.lower() in lower
+            ):
                 return True
     return False
 
