@@ -1,6 +1,6 @@
 """FileOrganizerSkill — the main skill implementation.
 
-Ties together scanner, categorizer, and mover behind the Skill interface.
+Ties together scanner, embedder, categorizer, and mover behind the Skill interface.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from localagent.config import resolve_paths
+from localagent.core.embedder import DEFAULT_EMBEDDING_MODEL, Embedder
 from localagent.core.engine import Engine
 from localagent.core.skill import Action, Report, Skill, SkillManifest
 from localagent.skills.file_organizer.categorizer import categorize
@@ -21,17 +22,17 @@ from localagent.skills.file_organizer.mover import (
     execute_moves,
     undo_moves,
 )
-from localagent.skills.file_organizer.scanner import FileProfile, scan_all
+from localagent.skills.file_organizer.scanner import scan_all
 
 logger = logging.getLogger(__name__)
 
 
 class FileOrganizerSkill(Skill):
-    """Organizes files in watched directories into LLM-generated categories."""
+    """Organizes files in watched directories into embedding-clustered categories."""
 
     manifest = SkillManifest(
         name="file-organizer",
-        description="Organizes files into smart, LLM-generated categories",
+        description="Organizes files into smart, embedding-clustered categories",
         permissions={"read", "move"},
         config_key="file-organizer",
     )
@@ -68,12 +69,23 @@ class FileOrganizerSkill(Skill):
             return []
 
         console.print(f"Found [bold]{len(profiles)}[/bold] files to categorize")
-        console.print("[dim]Running LLM categorization...[/dim]")
 
-        # Categorize with LLM
+        # Build embedder from config
+        embedding_model = self._config.get(
+            "embedding_model_path", DEFAULT_EMBEDDING_MODEL,
+        )
+        embedder = Embedder(model_path=embedding_model)
+
+        console.print("[dim]Embedding files and clustering...[/dim]")
+
+        # Categorize with embeddings + LLM naming
         result = categorize(
-            engine, profiles, self.state_dir,
-            batch_cooldown=self._config.get("batch_cooldown_seconds", 0),
+            engine,
+            embedder,
+            profiles,
+            self.state_dir,
+            distance_threshold=self._config.get("cluster_distance_threshold", 0.4),
+            max_cluster_samples=self._config.get("max_cluster_samples", 8),
         )
 
         taxonomy = result.get("taxonomy", {})

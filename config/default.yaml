@@ -36,8 +36,15 @@ skills:
     #   - ".rtf"
     #   - ".nfo"
 
-    # Seconds to pause between LLM batch calls (reduces thermal load)
-    batch_cooldown_seconds: 0
+    # Embedding model for file clustering (BERT-based, loaded via transformers)
+    embedding_model_path: "BAAI/bge-small-en-v1.5"
+
+    # Cosine distance threshold for agglomerative clustering.
+    # Lower = tighter clusters (more categories), higher = looser (fewer).
+    cluster_distance_threshold: 0.4
+
+    # Max files sampled per cluster when asking the LLM to name it
+    max_cluster_samples: 8
 
     # Warn (in logs) if a single run proposes more than this many moves
     move_warning_threshold: 50

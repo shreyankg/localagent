@@ -1,10 +1,9 @@
-"""File scanner — builds a rich profile of every file in watched directories."""
+"""File scanner — builds a profile of every file in watched directories."""
 
 from __future__ import annotations
 
 import fnmatch
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -25,258 +24,12 @@ _DEFAULT_TEXT_EXTENSIONS: frozenset[str] = frozenset({
     ".sql", ".r", ".R", ".m", ".tex", ".bib",
     ".log", ".ini", ".cfg", ".conf", ".env",
     ".gitignore", ".dockerignore",
-    # Plain-text formats often missed: emails, certs, calendar, vector graphics
     ".eml", ".msg",
     ".pem", ".crt", ".crl", ".cer", ".key",
     ".ics",
     ".svg",
     ".graphqls", ".graphql", ".gql",
 })
-
-
-# ── Extension → suggested category ────────────────────────────────────────
-# Deterministic pre-classification for unambiguous extensions.  Stored as
-# hints["suggested_category"] so the LLM can still override when the
-# filename or content suggests something more specific.
-
-_EXTENSION_CATEGORIES: dict[str, str] = {
-    # Spreadsheets (NOT documents — they have tabular data)
-    ".csv": "Spreadsheets", ".tsv": "Spreadsheets",
-    ".xlsx": "Spreadsheets", ".xls": "Spreadsheets", ".ods": "Spreadsheets",
-    # Installers
-    ".dmg": "Installers", ".pkg": "Installers", ".msi": "Installers",
-    ".deb": "Installers", ".rpm": "Installers", ".snap": "Installers",
-    ".appimage": "Installers",
-    # Emails
-    ".eml": "Emails", ".msg": "Emails",
-    # Photos / Images
-    ".heic": "Photos", ".jpg": "Photos", ".jpeg": "Photos",
-    ".png": "Photos", ".gif": "Photos", ".bmp": "Photos",
-    ".tiff": "Photos", ".tif": "Photos", ".webp": "Photos",
-    ".svg": "Photos", ".eps": "Photos", ".raw": "Photos",
-    # Videos
-    ".mp4": "Videos", ".mov": "Videos", ".mkv": "Videos",
-    ".avi": "Videos", ".wmv": "Videos", ".flv": "Videos",
-    ".webm": "Videos",
-    # Music / Audio
-    ".mp3": "Music", ".wav": "Music", ".flac": "Music",
-    ".aac": "Music", ".ogg": "Music", ".m4a": "Music", ".wma": "Music",
-    # Archives
-    ".zip": "Archives", ".tar": "Archives", ".gz": "Archives",
-    ".bz2": "Archives", ".xz": "Archives", ".rar": "Archives",
-    ".7z": "Archives",
-    # Calendar
-    ".ics": "Calendar Events",
-    # Certificates / Security
-    ".pem": "Certificates", ".crt": "Certificates", ".crl": "Certificates",
-    ".cer": "Certificates", ".key": "Certificates", ".p12": "Certificates",
-    ".pfx": "Certificates", ".pkpass": "Certificates",
-    # Presentations
-    ".pptx": "Presentations", ".ppt": "Presentations",
-    ".odp": "Presentations", ".key": "Presentations",
-    # Word-processor formats (specific name — "Documents" is too generic)
-    ".doc": "Word Documents", ".docx": "Word Documents",
-    ".odt": "Word Documents", ".rtf": "Word Documents",
-    # No .pdf mapping — PDFs must be classified by content (receipts, contracts, etc.)
-    # Web pages
-    ".html": "Web Pages", ".htm": "Web Pages",
-}
-
-
-# ── Filename pattern recognition ──────────────────────────────────────────
-# Detects well-known naming conventions from OSes, apps, and document types
-# to give the LLM richer signal — especially for binary files like PDFs
-# where we can't read content.
-
-_FILENAME_PATTERNS: list[tuple[re.Pattern[str], dict[str, str]]] = [
-    # macOS screenshots: "Screenshot 2024-03-15 at 2.30.22 PM.png"
-    (
-        re.compile(r"^Screenshot \d{4}-\d{2}-\d{2} at .+\.\w+$"),
-        {"source": "macos-screenshot"},
-    ),
-    # Linux screenshots: "Screenshot From 2025-07-10 15-39-27.png"
-    (
-        re.compile(r"^Screenshot From \d{4}-\d{2}-\d{2} .+\.\w+$"),
-        {"source": "linux-screenshot"},
-    ),
-    # WhatsApp images: "WhatsApp Image 2024-12-09 at 19.42.33.jpeg"
-    (
-        re.compile(r"^WhatsApp (?:Image|Video) \d{4}-\d{2}-\d{2} at .+\.\w+$"),
-        {"source": "whatsapp"},
-    ),
-    # iOS camera: "IMG_1234.HEIC" or "IMG_1234.jpg"
-    (
-        re.compile(r"^IMG_\d{4,5}\.\w+$", re.IGNORECASE),
-        {"source": "ios-camera"},
-    ),
-    # Android camera: "IMG_20240315_142233.jpg"
-    (
-        re.compile(r"^IMG_\d{8}_\d{6}\.\w+$"),
-        {"source": "android-camera"},
-    ),
-    # Canon/Nikon RAW: "20240315_142233.CR3" or "_DSC1234.NEF"
-    (
-        re.compile(r"^(?:\d{8}_\d{6}|_DSC\d{4,5})\.\w+$"),
-        {"source": "dslr-camera"},
-    ),
-    # Zoom recordings: "GMT20250120-143022_Recording.m4a"
-    (
-        re.compile(r"^GMT\d{8}-\d{6}_Recording\.\w+$"),
-        {"source": "zoom-recording"},
-    ),
-    # macOS installers: "AppName-1.2.3.dmg" or "AppName.dmg"
-    (
-        re.compile(r"^.+\.dmg$", re.IGNORECASE),
-        {"type": "macos-installer"},
-    ),
-    # Browser duplicate downloads: "filename (1).ext", "filename (2).ext"
-    (
-        re.compile(r"^(.+?) \((\d+)\)(\.\w+)$"),
-        {"download_duplicate": "true"},
-    ),
-    # Scanner-generated long names
-    (
-        re.compile(r"^Scan_.*_\d{8}_\d{6}.*\.\w+$"),
-        {"source": "document-scanner"},
-    ),
-    # Payslips
-    (
-        re.compile(r"(?i)^payslip[_\s-]"),
-        {"doc_type": "payslip", "suggested_category": "Pay Statements"},
-    ),
-    # Pay statements (broader than payslip)
-    (
-        re.compile(r"(?i)pay[_\s-]?statement"),
-        {"doc_type": "pay-statement", "suggested_category": "Pay Statements"},
-    ),
-    # Rent receipts
-    (
-        re.compile(r"(?i)rent[_\s-]?rec(?:ei|ie)pt"),
-        {"doc_type": "rent-receipt", "suggested_category": "Receipts & Invoices"},
-    ),
-    # Indian tax Form 16
-    (
-        re.compile(r"(?i)form\s*16"),
-        {"doc_type": "tax-form-16", "suggested_category": "Tax Documents"},
-    ),
-    # Aadhaar
-    (
-        re.compile(r"(?i)(?:e?aadhaar|EAadhaar)"),
-        {"doc_type": "aadhaar-id", "suggested_category": "Identity Documents"},
-    ),
-    # PAN Card
-    (
-        re.compile(r"(?i)^PAN[_\s-]?Card"),
-        {"doc_type": "pan-card", "suggested_category": "Identity Documents"},
-    ),
-    # Telecom / internet bills (common Indian providers)
-    (
-        re.compile(r"(?i)(?:VIL|Jio|Airtel|BSNL|ACT)[_\s-].*(?:bill|invoice)", re.IGNORECASE),
-        {"doc_type": "telecom-bill", "suggested_category": "Bills & Statements"},
-    ),
-    # Credit card statements
-    (
-        re.compile(r"(?i)(?:CC|credit[_\s-]?card)[_\s-]?statement"),
-        {"doc_type": "credit-card-statement", "suggested_category": "Bills & Statements"},
-    ),
-    # Mutual fund / investment statements
-    (
-        re.compile(r"(?i)(?:mutual\s*fund|CAS)[_\s-]?statement"),
-        {"doc_type": "investment-statement", "suggested_category": "Bills & Statements"},
-    ),
-    # Insurance policies
-    (
-        re.compile(r"(?i)insurance[_\s-]?polic"),
-        {"doc_type": "insurance-policy", "suggested_category": "Insurance"},
-    ),
-    # Recovery / backup codes (2FA, MFA, etc.)
-    (
-        re.compile(r"(?i)(?:recovery|backup)[_\s-]?codes?"),
-        {"doc_type": "recovery-codes", "suggested_category": "Security & Credentials"},
-    ),
-    # Purchase orders
-    (
-        re.compile(r"(?i)^PO[_-]"),
-        {"doc_type": "purchase-order", "suggested_category": "Receipts & Invoices"},
-    ),
-    # Quotations
-    (
-        re.compile(r"(?i)(?:^|\b)quotation"),
-        {"doc_type": "quotation", "suggested_category": "Receipts & Invoices"},
-    ),
-    # Proforma invoices
-    (
-        re.compile(r"(?i)(?:^|\b)proforma"),
-        {"doc_type": "proforma-invoice", "suggested_category": "Receipts & Invoices"},
-    ),
-    # Resignation / HR letters
-    (
-        re.compile(r"(?i)(?:^|\b)resignation"),
-        {"doc_type": "resignation-letter", "suggested_category": "HR Documents"},
-    ),
-    # Policy documents
-    (
-        re.compile(r"(?i)(?:^|\b)policy\b.*\.(?:pdf|docx?)$"),
-        {"doc_type": "policy-document", "suggested_category": "Policies & Guidelines"},
-    ),
-    # Generic invoice / bill patterns
-    (
-        re.compile(r"(?i)(?:^|\b)invoice"),
-        {"doc_type": "invoice", "suggested_category": "Receipts & Invoices"},
-    ),
-    (
-        re.compile(r"(?i)(?:^|\b)receipt"),
-        {"doc_type": "receipt", "suggested_category": "Receipts & Invoices"},
-    ),
-]
-
-
-def detect_filename_hints(name: str) -> dict[str, str]:
-    """Extract structured hints from well-known filename patterns.
-
-    Returns a dict of hint key-value pairs, empty if no patterns match.
-    Only the first matching pattern is used to avoid conflicting hints.
-    """
-    for pattern, hints in _FILENAME_PATTERNS:
-        m = pattern.search(name)
-        if m:
-            result = dict(hints)
-            # For duplicate downloads, also extract the base filename
-            if "download_duplicate" in result:
-                result["duplicate_of"] = m.group(1) + m.group(3)
-            return result
-    return {}
-
-
-def find_duplicate_groups(
-    profiles: list[FileProfile],
-) -> dict[str, list[FileProfile]]:
-    """Identify browser-duplicate groups: file.pdf, file (1).pdf, file (2).pdf.
-
-    Returns a mapping of base filename → list of duplicate profiles.
-    Only includes groups with at least one duplicate (2+ files).
-    """
-    dup_pattern = re.compile(r"^(.+?) \(\d+\)(\.\w+)$")
-    # Map base name → list of profiles (base + duplicates)
-    groups: dict[str, list[FileProfile]] = {}
-
-    base_lookup: dict[str, FileProfile] = {}
-    for p in profiles:
-        base_lookup[p.name] = p
-
-    for p in profiles:
-        m = dup_pattern.match(p.name)
-        if m:
-            base_name = m.group(1) + m.group(2)
-            if base_name not in groups:
-                groups[base_name] = []
-                # Include the base file if it exists
-                if base_name in base_lookup:
-                    groups[base_name].append(base_lookup[base_name])
-            groups[base_name].append(p)
-
-    # Only return groups that actually have duplicates
-    return {k: v for k, v in groups.items() if len(v) > 1}
 
 
 @dataclass
@@ -292,7 +45,6 @@ class FileProfile:
     modified: datetime | None = None
     content_preview: str | None = None
     is_readable: bool = False
-    hints: dict[str, str] = field(default_factory=dict)
 
     def to_summary(self) -> dict[str, Any]:
         """Compact dict representation for LLM prompts."""
@@ -304,9 +56,21 @@ class FileProfile:
         }
         if self.content_preview:
             d["content_preview"] = self.content_preview
-        if self.hints:
-            d["hints"] = self.hints
         return d
+
+    def embedding_text(self) -> str:
+        """Build a text string for embedding this file.
+
+        Combines filename, extension, and a truncated content preview
+        (when available) into a single string for the embedding model.
+        """
+        parts = [self.name]
+        if self.extension:
+            parts.append(self.extension)
+        if self.content_preview:
+            # Truncate preview to keep embedding input manageable
+            parts.append(self.content_preview[:200])
+        return " ".join(parts)
 
 
 def _human_size(num_bytes: int) -> str:
@@ -359,8 +123,7 @@ def _extract_pdf_text(path: Path, max_bytes: int = 512) -> str | None:
     """Extract text from the first page(s) of a PDF for content preview.
 
     Uses ``pymupdf`` (``fitz``) if installed; returns ``None`` silently if the
-    library is missing or extraction fails.  This keeps PDF preview as a
-    best-effort enhancement — the scanner works without it.
+    library is missing or extraction fails.
     """
     try:
         import fitz  # pymupdf
@@ -462,15 +225,6 @@ def scan_directory(
         if content_preview is None and entry.suffix.lower() == ".pdf":
             content_preview = _extract_pdf_text(entry, max_bytes=content_preview_bytes)
 
-        # Detect filename hints (screenshots, duplicates, doc types, etc.)
-        hints = detect_filename_hints(name)
-
-        # Extension-based suggested category (deterministic pre-classification)
-        ext_lower = entry.suffix.lower()
-        suggested = _EXTENSION_CATEGORIES.get(ext_lower)
-        if suggested and "suggested_category" not in hints:
-            hints["suggested_category"] = suggested
-
         profile = FileProfile(
             name=name,
             path=entry,
@@ -481,7 +235,6 @@ def scan_directory(
             modified=stat_info.get("modified"),
             content_preview=content_preview,
             is_readable=is_readable,
-            hints=hints,
         )
         profiles.append(profile)
 

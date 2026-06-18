@@ -4,7 +4,7 @@ Development guide for working on LocalAgent with Claude Code.
 
 ## Project Summary
 
-LocalAgent is a local AI agent framework powered by MLX. Skills are autonomous agents that run on-device using local LLMs. The first skill is a file organizer that categorizes files in watched directories using LLM-generated taxonomy.
+LocalAgent is a local AI agent framework powered by MLX. Skills are autonomous agents that run on-device using local LLMs. The first skill is a file organizer that clusters files by embedding similarity and uses an LLM to name the clusters.
 
 ## Build and Test
 
@@ -22,6 +22,7 @@ src/localagent/
 ├── cli.py              # argparse CLI, dispatches to command handlers
 ├── config.py           # YAML config loading with deep merge
 ├── core/
+│   ├── embedder.py    # Text embedding model wrapper (BGE-small via transformers)
 │   ├── engine.py       # MLX model wrapper (lazy load, chat template, JSON extraction)
 │   ├── safefs.py       # Sandboxed filesystem -- THE critical safety layer
 │   ├── skill.py        # Skill ABC + SkillManifest
@@ -40,6 +41,8 @@ src/localagent/
 4. Register in `localagent.core.registry.register_builtin_skills()`
 
 **Engine** (`core/engine.py`): Call `generate_text()` for raw output or `generate_json()` for parsed JSON with retry logic. The engine handles chat template formatting and code fence extraction automatically.
+
+**Embedder** (`core/embedder.py`): Lightweight wrapper for BERT-based embedding models (default: `BAAI/bge-small-en-v1.5`). Lazy-loads via `transformers` + `torch`. Call `embed(texts)` to get an `(N, D)` L2-normalised numpy array. Used by the file organizer for clustering; the LLM engine is only used for naming.
 
 **SafeFS** (`core/safefs.py`): Skills receive a `SafeFS` instance scoped to their allowed directories. Use `list_dir()`, `read_file()`, `stat()`, `move_file()`, `make_dir()`. There is no delete operation.
 
@@ -116,7 +119,7 @@ The trigger system is in `core/triggers.py`. Currently only `CronTrigger` exists
 | Path | Purpose |
 |---|---|
 | `~/.config/localagent/config.yaml` | User configuration |
-| `~/.config/localagent/<skill>/` | Per-skill learned state (e.g. taxonomy) |
+| `~/.config/localagent/<skill>/` | Per-skill learned state (taxonomy, cluster centroids) |
 | `~/.local/share/localagent/logs/` | Undo journals |
 | `config/default.yaml` | Shipped defaults (merged under user config) |
 
@@ -139,7 +142,20 @@ These are lessons learned during development. Follow them for future changes.
 
 ## Model Compatibility
 
-The engine is model-agnostic. Any model supported by `mlx-lm` works -- set `model.model_path` in config. The engine uses `tokenizer.apply_chat_template()` for prompt formatting, so instruction-tuned models with chat templates work best.
+**LLM (naming):** The engine is model-agnostic. Any model supported by `mlx-lm` works -- set `model.model_path` in config. The engine uses `tokenizer.apply_chat_template()` for prompt formatting, so instruction-tuned models with chat templates work best.
+
+**Embedding (clustering):** The embedder loads any HuggingFace BERT-based model via `transformers`. Set `skills.file-organizer.embedding_model_path` in config. The default is `BAAI/bge-small-en-v1.5` (33M params, 384 dimensions).
+
+### File Organizer Pipeline
+
+The file organizer uses a three-stage pipeline: **embed → cluster → name**.
+
+1. Each file's name, extension, and content preview are encoded into embeddings via BGE-small.
+2. Agglomerative clustering (cosine distance) groups similar files into 3–25 clusters.
+3. A single LLM call names all clusters with concise 2–3 word folder names.
+
+On **warm runs** (subsequent runs after the first), saved cluster centroids are loaded. New files are assigned to the nearest existing centroid when close enough. Only files that don't match any existing cluster are re-clustered and sent to the LLM -- with existing names passed as context so the LLM reuses them instead of creating synonyms.
 
 Tested with:
-- `mlx-community/Llama-3.2-3B-Instruct-4bit` (default)
+- LLM: `mlx-community/Llama-3.2-3B-Instruct-4bit` (default)
+- Embeddings: `BAAI/bge-small-en-v1.5` (default)

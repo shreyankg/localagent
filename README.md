@@ -44,7 +44,7 @@ localagent config                        # Show configuration
 
 | Skill | Description | Docs |
 |---|---|---|
-| [file-organizer](src/localagent/skills/file_organizer/) | Scans directories, uses the LLM to generate an adaptive taxonomy from file content, and organizes files into semantic categories | [README](src/localagent/skills/file_organizer/README.md) |
+| [file-organizer](src/localagent/skills/file_organizer/) | Clusters files by embedding similarity and uses the LLM to name each cluster as a folder category | [README](src/localagent/skills/file_organizer/README.md) |
 
 ## Configuration
 
@@ -114,6 +114,7 @@ src/localagent/
 ├── cli.py                          # CLI entry point
 ├── config.py                       # Config loading and merging
 ├── core/
+│   ├── embedder.py                # Text embedding model (BGE-small)
 │   ├── engine.py                   # MLX model wrapper
 │   ├── safefs.py                   # Sandboxed filesystem API
 │   ├── skill.py                    # Skill ABC and manifest

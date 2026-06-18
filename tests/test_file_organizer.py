@@ -1,9 +1,12 @@
 """Tests for the file organizer skill — scanner, categorizer, mover."""
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 import yaml
 
@@ -16,9 +19,12 @@ from localagent.skills.file_organizer.scanner import (
     scan_directory,
 )
 from localagent.skills.file_organizer.categorizer import (
-    _is_bad_category_name,
-    _normalize_categories,
-    _validate_response,
+    _assign_to_existing,
+    _build_naming_prompt,
+    _cluster_embeddings,
+    _compute_centroids,
+    _sample_clusters,
+    _validate_names,
     categorize,
     load_taxonomy,
     save_taxonomy,
@@ -128,6 +134,32 @@ class TestScanner:
             assert "mime_type" in summary
             assert "size" in summary
 
+    def test_embedding_text_with_preview(self):
+        p = FileProfile(
+            name="script.py",
+            path=Path("/tmp/script.py"),
+            extension=".py",
+            mime_type="text/x-python",
+            size_bytes=100,
+            content_preview="import torch\nmodel = torch.nn.Linear(10, 5)",
+        )
+        text = p.embedding_text()
+        assert "script.py" in text
+        assert ".py" in text
+        assert "import torch" in text
+
+    def test_embedding_text_without_preview(self):
+        p = FileProfile(
+            name="photo.jpg",
+            path=Path("/tmp/photo.jpg"),
+            extension=".jpg",
+            mime_type="image/jpeg",
+            size_bytes=5000,
+        )
+        text = p.embedding_text()
+        assert "photo.jpg" in text
+        assert ".jpg" in text
+
 
 # ── PDF extraction tests ──────────────────────────────────────────────────
 
@@ -214,199 +246,200 @@ class TestPdfExtraction:
 # ── Categorizer tests ──────────────────────────────────────────────────────
 
 
-class TestValidateResponse:
-    def test_drops_unknown_ids(self):
-        id_map = {"f1": "real.txt"}
-        result = {
-            "taxonomy": {"Docs": "documents"},
-            "assignments": {
-                "f1": "Docs",
-                "f99": "Docs",  # unknown ID
-            },
+class TestClustering:
+    def test_few_files_get_individual_clusters(self):
+        """When there are <= 3 files, each gets its own cluster."""
+        embeddings = np.array([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ], dtype=np.float32)
+        labels = _cluster_embeddings(embeddings, distance_threshold=0.4)
+        assert len(labels) == 2
+        assert labels[0] == 0
+        assert labels[1] == 1
+
+    def test_similar_files_cluster_together(self):
+        """Very similar embeddings should end up in the same cluster."""
+        embeddings = np.array([
+            [1.0, 0.0, 0.0],
+            [0.99, 0.01, 0.0],
+            [0.98, 0.02, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.01, 0.99, 0.0],
+            [0.02, 0.98, 0.0],
+        ], dtype=np.float32)
+        # Normalise
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        embeddings = embeddings / norms
+
+        labels = _cluster_embeddings(embeddings, distance_threshold=0.3)
+        # Should produce 2 clusters (group of x-axis vs group of y-axis)
+        assert len(set(labels)) == 2
+        # First three should be in same cluster
+        assert labels[0] == labels[1] == labels[2]
+        # Last three should be in same cluster
+        assert labels[3] == labels[4] == labels[5]
+
+    def test_compute_centroids(self):
+        embeddings = np.array([
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+        ], dtype=np.float32)
+        labels = np.array([0, 1, 0])
+        centroids = _compute_centroids(embeddings, labels)
+        assert centroids.shape == (2, 2)
+        # Cluster 0 centroid should be [1, 0] (normalised)
+        np.testing.assert_allclose(centroids[0], [1.0, 0.0], atol=0.01)
+        # Cluster 1 centroid should be [0, 1] (normalised)
+        np.testing.assert_allclose(centroids[1], [0.0, 1.0], atol=0.01)
+
+
+class TestAssignToExisting:
+    def test_matches_close_embeddings(self):
+        existing_centroids = np.array([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ], dtype=np.float32)
+        existing_names = ["Code Files", "Documents"]
+        new_embeddings = np.array([
+            [0.95, 0.05, 0.0],  # close to Code Files
+            [0.05, 0.95, 0.0],  # close to Documents
+        ], dtype=np.float32)
+        # Normalise
+        norms = np.linalg.norm(new_embeddings, axis=1, keepdims=True)
+        new_embeddings = new_embeddings / norms
+
+        _, matched_names = _assign_to_existing(
+            new_embeddings, existing_centroids, existing_names,
+        )
+        assert matched_names[0] == "Code Files"
+        assert matched_names[1] == "Documents"
+
+    def test_rejects_distant_embeddings(self):
+        existing_centroids = np.array([
+            [1.0, 0.0, 0.0],
+        ], dtype=np.float32)
+        existing_names = ["Code Files"]
+        # Orthogonal = cosine distance 1.0, well above cutoff
+        new_embeddings = np.array([
+            [0.0, 1.0, 0.0],
+        ], dtype=np.float32)
+
+        _, matched_names = _assign_to_existing(
+            new_embeddings, existing_centroids, existing_names,
+        )
+        assert matched_names[0] is None
+
+
+class TestValidateNames:
+    def test_valid_names_with_descriptions(self):
+        raw = {
+            "0": {"name": "Code Projects", "description": "Source code and dev files"},
+            "1": {"name": "Tax Documents", "description": "Tax returns and related forms"},
         }
-        validated = _validate_response(result, id_map)
-        assert "real.txt" in validated["assignments"]
-        assert len(validated["assignments"]) == 1
+        result = _validate_names(raw, n_clusters=2)
+        assert result[0] == ("Code Projects", "Source code and dev files")
+        assert result[1] == ("Tax Documents", "Tax returns and related forms")
 
-    def test_auto_adds_unknown_categories(self):
-        id_map = {"f1": "file.txt"}
-        result = {
-            "taxonomy": {"Docs": "documents"},
-            "assignments": {
-                "f1": "NonexistentCategory",
-            },
+    def test_plain_string_fallback(self):
+        raw = {"0": "Code Projects", "1": "Tax Documents"}
+        result = _validate_names(raw, n_clusters=2)
+        assert result[0][0] == "Code Projects"
+        assert result[1][0] == "Tax Documents"
+
+    def test_generic_names_rejected(self):
+        raw = {
+            "0": {"name": "Miscellaneous", "description": "misc stuff"},
+            "1": {"name": "Documents", "description": "docs"},
+            "2": {"name": "Code Projects", "description": "Source code files"},
         }
-        validated = _validate_response(result, id_map)
-        # File should NOT be dropped; category auto-added instead
-        assert "file.txt" in validated["assignments"]
-        assert "NonexistentCategory" in validated["taxonomy"]
+        result = _validate_names(raw, n_clusters=3)
+        assert result[0][0] == "Group 0"  # fallback
+        assert result[1][0] == "Group 1"  # fallback
+        assert result[2][0] == "Code Projects"  # kept
+        assert result[2][1] == "Source code files"
 
-    def test_valid_assignments_kept(self):
-        id_map = {"f1": "readme.md", "f2": "main.py"}
-        result = {
-            "taxonomy": {"Docs": "documents", "Code": "source code"},
-            "assignments": {
-                "f1": "Docs",
-                "f2": "Code",
-            },
+    def test_non_integer_keys_skipped(self):
+        raw = {"zero": "Something", "1": {"name": "Code Projects", "description": "Source code"}}
+        result = _validate_names(raw, n_clusters=2)
+        assert 1 in result
+        assert len(result) == 1
+
+    def test_empty_names_rejected(self):
+        raw = {
+            "0": {"name": "", "description": "empty"},
+            "1": {"name": "a", "description": "too short"},
+            "2": {"name": "Valid Name", "description": "A real category"},
         }
-        validated = _validate_response(result, id_map)
-        assert len(validated["assignments"]) == 2
-        assert validated["assignments"]["readme.md"] == "Docs"
-        assert validated["assignments"]["main.py"] == "Code"
+        result = _validate_names(raw, n_clusters=3)
+        assert result[0][0] == "Group 0"
+        assert result[1][0] == "Group 1"
+        assert result[2] == ("Valid Name", "A real category")
 
-    def test_bad_category_names_stripped(self):
-        id_map = {"f1": "readme.md", "f2": "data.csv"}
-        all_filenames = {"readme.md", "data.csv", "report.pdf"}
-        result = {
-            "taxonomy": {
-                "Code": "source code",
-                "report.pdf": "a bad filename category",
-                "true": "a YAML artifact",
-            },
-            "assignments": {
-                "f1": "report.pdf",
-                "f2": "true",
-            },
+
+class TestNamingPrompt:
+    def test_cold_run_prompt(self):
+        samples = {
+            0: [{"name": "script.py", "extension": ".py"}],
+            1: [{"name": "photo.jpg", "extension": ".jpg"}],
         }
-        validated = _validate_response(result, id_map, all_filenames)
-        # Bad categories should be removed, files reassigned via extension
-        assert "report.pdf" not in validated["taxonomy"]
-        assert "true" not in validated["taxonomy"]
-        # .md has no extension category → "Other Files"; .csv → "Spreadsheets"
-        assert validated["assignments"]["readme.md"] == "Other Files"
-        assert validated["assignments"]["data.csv"] == "Spreadsheets"
+        messages = _build_naming_prompt(samples)
+        assert len(messages) == 2
+        assert messages[0]["role"] == "system"
+        assert "2-to-3 word" in messages[0]["content"]
+        assert "Group 0" in messages[1]["content"]
 
-    def test_filename_as_category_in_assignments_caught(self):
-        """LLM returns a filename as category in assignments (not taxonomy)."""
-        id_map = {"f1": "IMG_0019.HEIC", "f2": "notes.txt"}
-        all_filenames = {"IMG_0019.HEIC", "notes.txt", "schema.graphqls"}
-        result = {
-            "taxonomy": {"Photos": "photos"},
-            "assignments": {
-                "f1": "IMG_0019.HEIC",  # filename echoed back as category
-                "f2": "schema.graphqls",  # filename from another batch
-            },
+    def test_warm_run_prompt_includes_existing_names(self):
+        samples = {
+            0: [{"name": "new_file.rs", "extension": ".rs"}],
         }
-        validated = _validate_response(result, id_map, all_filenames)
-        # .HEIC → "Photos" (from extension), .txt → "Other Files" (no ext category)
-        assert validated["assignments"]["IMG_0019.HEIC"] == "Photos"
-        assert validated["assignments"]["notes.txt"] == "Other Files"
+        messages = _build_naming_prompt(samples, existing_names=["Code Projects", "Photos"])
+        user_content = messages[1]["content"]
+        assert "Code Projects" in user_content
+        assert "Photos" in user_content
+        assert "Reuse" in user_content
 
 
-class TestBadCategoryName:
-    def test_rejects_exact_filename_match(self):
-        filenames = {"report.pdf", "IMG_2034.jpg", "script.py"}
-        assert _is_bad_category_name("report.pdf", filenames)
-        assert _is_bad_category_name("IMG_2034.jpg", filenames)
-        assert _is_bad_category_name("script.py", filenames)
+class TestSampleClusters:
+    def test_limits_samples_per_cluster(self):
+        profiles = [
+            FileProfile(
+                name=f"file{i}.txt",
+                path=Path(f"/tmp/file{i}.txt"),
+                extension=".txt",
+                mime_type="text/plain",
+                size_bytes=100,
+            )
+            for i in range(20)
+        ]
+        labels = np.array([0] * 10 + [1] * 10)
+        samples = _sample_clusters(labels, profiles, max_samples=3)
+        assert len(samples[0]) == 3
+        assert len(samples[1]) == 3
 
-    def test_rejects_long_filename_stem_as_category(self):
-        filenames = {"Logo-Red_Hat-Engineering.eps", "Data Literacy Learning Paths.pdf"}
-        # Long filename stems (>= 8 chars) used as categories are rejected
-        assert _is_bad_category_name("Logo-Red_Hat-Engineering", filenames)
-        assert _is_bad_category_name("Data Literacy Learning Paths", filenames)
-        # Case-insensitive stem matching
-        assert _is_bad_category_name("data literacy learning paths", filenames)
-
-    def test_rejects_long_substring_of_filename(self):
-        filenames = {"Logo-Red_Hat-Engineering.eps", "Airtel Black Statement.pdf"}
-        # Category (>= 6 chars) that is a substring of a filename
-        assert _is_bad_category_name("Logo-Red_Hat", filenames)
-        assert _is_bad_category_name("Airtel Black", filenames)
-
-    def test_rejects_medium_filename_stem_as_category(self):
-        filenames = {"Aadhaar.pdf", "VFS GLOBAL.pdf"}
-        # Stems >= 6 chars that match a filename are too specific
-        assert _is_bad_category_name("Aadhaar", filenames)
-        assert _is_bad_category_name("VFS GLOBAL", filenames)
-
-    def test_allows_short_filename_stem_as_category(self):
-        filenames = {"Code.zip", "Data.csv", "Music.tar"}
-        # Short stems (< 6 chars) are legitimate category names
-        assert not _is_bad_category_name("Code", filenames)
-        assert not _is_bad_category_name("Data", filenames)
-        assert not _is_bad_category_name("Music", filenames)
-
-    def test_does_not_reject_category_containing_filename(self):
-        filenames = {"Code", "Research"}
-        # Filename appears inside a valid category — should NOT be rejected
-        assert not _is_bad_category_name("Code Projects", filenames)
-        assert not _is_bad_category_name("Research Papers", filenames)
-
-    def test_rejects_yaml_artifacts(self):
-        assert _is_bad_category_name("true")
-        assert _is_bad_category_name("false")
-        assert _is_bad_category_name("user_locked: true")
-
-    def test_rejects_short_strings(self):
-        assert _is_bad_category_name("")
-        assert _is_bad_category_name("a")
-
-    def test_rejects_generic_catchall_categories(self):
-        assert _is_bad_category_name("Documents")
-        assert _is_bad_category_name("Miscellaneous")
-        assert _is_bad_category_name("Other")
-        assert _is_bad_category_name("General")
-        assert _is_bad_category_name("Uncategorized")
-
-    def test_rejects_too_long_category_names(self):
-        long_name = "This Is Way Too Long To Be A Real Category Name Surely"
-        assert _is_bad_category_name(long_name)
-
-    def test_rejects_url_style_category_names(self):
-        assert _is_bad_category_name("downloadbill?siNumber=123")
-        assert _is_bad_category_name("file/path/thing")
-        assert _is_bad_category_name("key=value")
-
-    def test_rejects_category_containing_filename(self):
-        filenames = {"report.pdf", "data.csv"}
-        # Category that embeds a full filename (with extension)
-        assert _is_bad_category_name("Files like report.pdf", filenames)
-
-    def test_accepts_valid_categories(self):
-        filenames = {"report.pdf", "photo.jpg"}
-        assert not _is_bad_category_name("Receipts & Invoices", filenames)
-        assert not _is_bad_category_name("Code Projects", filenames)
-        assert not _is_bad_category_name("Screenshots", filenames)
-        assert not _is_bad_category_name("Tax Documents", filenames)
-
-
-class TestNormalizeCategories:
-    def test_merges_case_duplicates(self):
-        taxonomy = {"Receipts": "payment records", "receipts": "also payment records"}
-        assignments = {"a.pdf": "Receipts", "b.pdf": "receipts"}
-        norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
-        assert len(norm_tax) == 1
-        assert "Receipts" in norm_tax
-        assert norm_assign["a.pdf"] == "Receipts"
-        assert norm_assign["b.pdf"] == "Receipts"
-
-    def test_merges_substring_duplicates(self):
-        taxonomy = {
-            "Invoices": "billing documents",
-            "Tax Invoices": "also billing documents",
-        }
-        assignments = {"a.pdf": "Invoices", "b.pdf": "Tax Invoices"}
-        norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
-        assert len(norm_tax) == 1
-        assert "Invoices" in norm_tax
-        assert norm_assign["b.pdf"] == "Invoices"
-
-    def test_keeps_distinct_categories(self):
-        taxonomy = {
-            "Receipts": "payment records",
-            "Code": "source code",
-            "Screenshots": "screen captures",
-        }
-        assignments = {"a.pdf": "Receipts", "b.py": "Code"}
-        norm_tax, norm_assign = _normalize_categories(taxonomy, assignments)
-        assert len(norm_tax) == 3
-        assert norm_assign == assignments
-
-    def test_empty_taxonomy(self):
-        norm_tax, norm_assign = _normalize_categories({}, {"a.txt": "X"})
-        assert norm_tax == {}
+    def test_prefers_files_with_previews(self):
+        profiles = [
+            FileProfile(
+                name="no_preview.txt",
+                path=Path("/tmp/no_preview.txt"),
+                extension=".txt",
+                mime_type="text/plain",
+                size_bytes=100,
+            ),
+            FileProfile(
+                name="has_preview.txt",
+                path=Path("/tmp/has_preview.txt"),
+                extension=".txt",
+                mime_type="text/plain",
+                size_bytes=100,
+                content_preview="some content",
+            ),
+        ]
+        labels = np.array([0, 0])
+        samples = _sample_clusters(labels, profiles, max_samples=1)
+        # Should pick the file with preview first
+        assert samples[0][0]["name"] == "has_preview.txt"
 
 
 class TestTaxonomyIO:
@@ -426,21 +459,22 @@ class TestTaxonomyIO:
 
 
 class TestCategorize:
-    @patch("localagent.skills.file_organizer.categorizer.Engine")
-    def test_cold_start_categorization(self, MockEngine, tmp_path):
-        """Test first-run categorization with mocked LLM."""
+    def test_cold_start_categorization(self, tmp_path):
+        """Test first-run categorization with mocked embedder and LLM."""
         engine = MagicMock()
-        # LLM returns short IDs (f1, f2) — the categorizer maps them back
         engine.generate_json.return_value = {
-            "taxonomy": {
-                "Project Notes": "Markdown notes and READMEs",
-                "Data Science": "ML and data files",
-            },
-            "assignments": {
-                "f1": "Project Notes",
-                "f2": "Data Science",
+            "names": {
+                "0": {"name": "Project Notes", "description": "Markdown notes and READMEs"},
+                "1": {"name": "Data Science", "description": "ML and data analysis scripts"},
             },
         }
+
+        embedder = MagicMock()
+        # Return embeddings that will cluster into 2 groups
+        embedder.embed.return_value = np.array([
+            [1.0, 0.0, 0.0],  # readme.md
+            [0.0, 1.0, 0.0],  # train.py
+        ], dtype=np.float32)
 
         profiles = [
             FileProfile(
@@ -461,21 +495,78 @@ class TestCategorize:
             ),
         ]
 
-        result = categorize(engine, profiles, tmp_path)
+        result = categorize(engine, embedder, profiles, tmp_path)
 
         assert "taxonomy" in result
         assert "assignments" in result
         assert result["assignments"]["readme.md"] == "Project Notes"
         assert result["assignments"]["train.py"] == "Data Science"
 
+        # Taxonomy descriptions should come from the LLM, not be placeholders
+        assert result["taxonomy"]["Project Notes"] == "Markdown notes and READMEs"
+        assert result["taxonomy"]["Data Science"] == "ML and data analysis scripts"
+
         # Taxonomy should be saved
         assert load_taxonomy(tmp_path) is not None
 
+        # Embedder should have been called
+        embedder.embed.assert_called_once()
+
     def test_empty_profiles_returns_empty(self, tmp_path):
         engine = MagicMock()
-        result = categorize(engine, [], tmp_path)
+        embedder = MagicMock()
+        result = categorize(engine, embedder, [], tmp_path)
         assert result["assignments"] == {}
         assert result["taxonomy"] == {}
+
+    def test_warm_run_reuses_existing_clusters(self, tmp_path):
+        """On warm run, files close to existing centroids get assigned without LLM."""
+        # Set up saved centroids from a previous run
+        existing_centroids = np.array([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ], dtype=np.float32)
+        existing_names = ["Code Files", "Documents"]
+        np.savez(tmp_path / "centroids.npz", centroids=existing_centroids)
+        with open(tmp_path / "centroid_names.yaml", "w") as f:
+            yaml.dump(existing_names, f)
+        save_taxonomy(tmp_path, {"taxonomy": {
+            "Code Files": "Source code",
+            "Documents": "Text documents",
+        }})
+
+        engine = MagicMock()
+        embedder = MagicMock()
+        # Return embeddings very close to existing centroids
+        embedder.embed.return_value = np.array([
+            [0.99, 0.01, 0.0],  # close to Code Files
+            [0.01, 0.99, 0.0],  # close to Documents
+        ], dtype=np.float32)
+
+        profiles = [
+            FileProfile(
+                name="new_script.py",
+                path=tmp_path / "new_script.py",
+                extension=".py",
+                mime_type="text/x-python",
+                size_bytes=200,
+            ),
+            FileProfile(
+                name="report.txt",
+                path=tmp_path / "report.txt",
+                extension=".txt",
+                mime_type="text/plain",
+                size_bytes=150,
+            ),
+        ]
+
+        result = categorize(engine, embedder, profiles, tmp_path)
+
+        assert result["assignments"]["new_script.py"] == "Code Files"
+        assert result["assignments"]["report.txt"] == "Documents"
+
+        # LLM should NOT have been called (all matched existing)
+        engine.generate_json.assert_not_called()
 
 
 # ── Mover tests ─────────────────────────────────────────────────────────────
@@ -494,7 +585,7 @@ class TestBuildActions:
         )
 
         actions = build_actions(
-            assignments={"doc.pdf": "Documents"},
+            assignments={"doc.pdf": "Tax Documents"},
             profiles_by_name={"doc.pdf": profile},
             watch_directories=[tmp_path],
         )
@@ -502,7 +593,7 @@ class TestBuildActions:
         assert len(actions) == 1
         assert actions[0].action_type == "move"
         assert "doc.pdf" in actions[0].source
-        assert "Documents" in actions[0].destination
+        assert "Tax Documents" in actions[0].destination
 
 
 class TestExecuteMoves:
