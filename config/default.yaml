@@ -36,6 +36,9 @@ skills:
     #   - ".rtf"
     #   - ".nfo"
 
+    # Seconds to pause between LLM batch calls (reduces thermal load)
+    batch_cooldown_seconds: 0
+
     # Warn (in logs) if a single run proposes more than this many moves
     move_warning_threshold: 50
 

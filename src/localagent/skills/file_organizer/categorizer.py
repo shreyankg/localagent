@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -181,6 +182,10 @@ IMPORTANT: Every category name you use in "assignments" MUST also appear in \
 "taxonomy" with a description. Do not assign a file to a category that is \
 not listed in the taxonomy.
 
+If you are NOT confident about a file's category — for example, a PDF with \
+an ambiguous filename and no content preview — include its ID in the \
+"low_confidence" list. These files will be re-examined later with more context.
+
 Respond with ONLY valid JSON in this exact format:
 {
   "taxonomy": {
@@ -191,7 +196,8 @@ Respond with ONLY valid JSON in this exact format:
     "f1": "Category Name",
     "f2": "Category Name",
     ...
-  }
+  },
+  "low_confidence": ["f2"]
 }
 """
 
@@ -244,6 +250,10 @@ in your assignments.
 IMPORTANT: Every category name you use in "assignments" MUST also appear in \
 "taxonomy". Do not assign a file to a category that is not listed in the taxonomy.
 
+If you are NOT confident about a file's category — for example, a PDF with \
+an ambiguous filename and no content preview — include its ID in the \
+"low_confidence" list. These files will be re-examined later with more context.
+
 Respond with ONLY valid JSON in this exact format:
 {
   "taxonomy": {
@@ -255,7 +265,8 @@ Respond with ONLY valid JSON in this exact format:
     "f1": "Category Name",
     "f2": "Category Name",
     ...
-  }
+  },
+  "low_confidence": ["f2"]
 }
 """
 
@@ -579,6 +590,7 @@ def _validate_response(
     """
     taxonomy = result.get("taxonomy", {})
     assignments = result.get("assignments", {})
+    low_confidence_ids: set[str] = set(result.get("low_confidence", []))
     profiles_by_name = profiles_by_name or {}
 
     # Build filename set: current batch + any extras passed in
@@ -640,6 +652,23 @@ def _validate_response(
             taxonomy[category] = f"Files categorized as {category}"
         valid_assignments[filename] = category
 
+    # Reassign low-confidence files to "Other Files" so they get
+    # re-categorized on the next warm run (with content previews).
+    if low_confidence_ids:
+        for fid in low_confidence_ids:
+            fname = id_to_filename.get(fid)
+            if fname and fname in valid_assignments:
+                logger.info(
+                    "Low confidence: '%s' → 'Other Files' (was '%s')",
+                    fname,
+                    valid_assignments[fname],
+                )
+                valid_assignments[fname] = "Other Files"
+        if "Other Files" not in taxonomy and any(
+            v == "Other Files" for v in valid_assignments.values()
+        ):
+            taxonomy["Other Files"] = "Low-confidence files pending re-categorization"
+
     return {
         "taxonomy": taxonomy,
         "assignments": valid_assignments,
@@ -683,12 +712,17 @@ def categorize(
     engine: Engine,
     profiles: list[FileProfile],
     state_dir: Path,
+    *,
+    batch_cooldown: float = 0,
 ) -> dict[str, Any]:
     """Categorize files using the LLM, evolving the taxonomy over time.
 
     Duplicate downloads (``file.pdf``, ``file (1).pdf``) are detected
     before the LLM call.  Only the base file is sent for categorization
     and duplicates are auto-assigned to the same category afterward.
+
+    *batch_cooldown* is the number of seconds to pause between LLM batch
+    calls to reduce thermal load on the hardware.
 
     Returns ``{"taxonomy": {...}, "assignments": {"file": "category", ...}}``.
     """
@@ -784,6 +818,11 @@ def categorize(
             latest_taxonomy = _merge_taxonomy(
                 latest_taxonomy, result, all_known_filenames,
             )
+
+        # Cool-down between batches to avoid thermal throttling
+        if batch_cooldown > 0 and i < len(batches) - 1:
+            logger.debug("Cooling down for %g s before next batch", batch_cooldown)
+            time.sleep(batch_cooldown)
 
     if batch_errors:
         logger.warning(

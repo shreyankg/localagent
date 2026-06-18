@@ -71,7 +71,10 @@ class FileOrganizerSkill(Skill):
         console.print("[dim]Running LLM categorization...[/dim]")
 
         # Categorize with LLM
-        result = categorize(engine, profiles, self.state_dir)
+        result = categorize(
+            engine, profiles, self.state_dir,
+            batch_cooldown=self._config.get("batch_cooldown_seconds", 0),
+        )
 
         taxonomy = result.get("taxonomy", {})
         assignments = result.get("assignments", {})
