@@ -61,12 +61,17 @@ class FileProfile:
     def embedding_text(self) -> str:
         """Build a text string for embedding this file.
 
-        Combines filename, extension, and a truncated content preview
-        (when available) into a single string for the embedding model.
+        Combines filename, extension, MIME type, and a truncated content
+        preview (when available) into a single string for the embedding
+        model.  Including the MIME type ensures that files without content
+        previews (images, archives, etc.) still carry enough semantic
+        signal for the embedder to separate them by type.
         """
         parts = [self.name]
         if self.extension:
             parts.append(self.extension)
+        if self.mime_type:
+            parts.append(self.mime_type)
         if self.content_preview:
             # Truncate preview to keep embedding input manageable
             parts.append(self.content_preview[:200])

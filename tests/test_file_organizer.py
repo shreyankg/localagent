@@ -146,6 +146,7 @@ class TestScanner:
         text = p.embedding_text()
         assert "script.py" in text
         assert ".py" in text
+        assert "text/x-python" in text
         assert "import torch" in text
 
     def test_embedding_text_without_preview(self):
@@ -159,6 +160,7 @@ class TestScanner:
         text = p.embedding_text()
         assert "photo.jpg" in text
         assert ".jpg" in text
+        assert "image/jpeg" in text
 
 
 # ── PDF extraction tests ──────────────────────────────────────────────────
