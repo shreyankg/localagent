@@ -151,7 +151,7 @@ These are lessons learned during development. Follow them for future changes.
 The file organizer uses a three-stage pipeline: **embed → cluster → name**.
 
 1. Each file's name, extension, and content preview are encoded into embeddings via BGE-small.
-2. Agglomerative clustering (cosine distance) groups similar files into 3–25 clusters.
+2. Agglomerative clustering (cosine distance) groups similar files into 3–15 clusters.
 3. A single LLM call names all clusters with concise 2–3 word folder names.
 
 On **warm runs** (subsequent runs after the first), saved cluster centroids are loaded. New files are assigned to the nearest existing centroid when close enough. Only files that don't match any existing cluster are re-clustered and sent to the LLM -- with existing names passed as context so the LLM reuses them instead of creating synonyms.

@@ -99,7 +99,7 @@ def _save_centroids(
 # ── Clustering ──────────────────────────────────────────────────────────────
 
 _MIN_CLUSTERS = 3
-_MAX_CLUSTERS = 25
+_MAX_CLUSTERS = 15
 
 
 def _cluster_embeddings(
