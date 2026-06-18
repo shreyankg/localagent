@@ -113,8 +113,14 @@ def _partition_incremental(
         prev_size = entry.get("size")
 
         if prev_mtime == curr_mtime and prev_size == p.size_bytes:
-            # Unchanged — reuse cached category
-            cached[p.name] = entry["category"]
+            prev_category = entry["category"]
+            if prev_category == "Other Files":
+                # Previously fell through to generic fallback — give the
+                # LLM another chance with content previews on warm runs.
+                to_categorize.append(p)
+            else:
+                # Unchanged — reuse cached category
+                cached[p.name] = prev_category
         else:
             # Modified — re-categorize
             to_categorize.append(p)
@@ -256,11 +262,17 @@ Respond with ONLY valid JSON in this exact format:
 
 def _build_file_inventory(
     profiles: list[FileProfile],
+    *,
+    include_previews: bool = True,
 ) -> tuple[str, dict[str, str]]:
     """Format file profiles into a text block for the LLM prompt.
 
     Each file gets a short ID (``f1``, ``f2``, …) to avoid asking the
     LLM to reproduce long filenames verbatim.
+
+    When *include_previews* is False, content previews are stripped from
+    the summaries to reduce token usage (useful for cold-start runs
+    where batch sizes are large).
 
     Returns ``(inventory_text, id_to_filename)`` where *id_to_filename*
     maps the short IDs back to real filenames.
@@ -271,6 +283,8 @@ def _build_file_inventory(
         fid = f"f{idx + 1}"
         id_to_filename[fid] = p.name
         summary = p.to_summary()
+        if not include_previews:
+            summary.pop("content_preview", None)
         summary["id"] = fid
         summaries.append(summary)
     return json.dumps(summaries, indent=2), id_to_filename
@@ -281,9 +295,11 @@ def _build_cold_messages(
 ) -> tuple[list[dict[str, str]], dict[str, str]]:
     """Build messages for a first-run (no existing taxonomy).
 
+    Content previews are excluded to allow larger batch sizes.
+
     Returns ``(messages, id_to_filename)``.
     """
-    inventory, id_map = _build_file_inventory(profiles)
+    inventory, id_map = _build_file_inventory(profiles, include_previews=False)
     messages = [
         {"role": "system", "content": _COLD_START_SYSTEM},
         {
@@ -331,8 +347,8 @@ def _build_warm_messages(
     if num_categories >= _MAX_TAXONOMY_SIZE:
         cap_warning = (
             f"\n\nIMPORTANT: There are already {num_categories} categories. "
-            "Do NOT add new categories. Assign every file to an existing "
-            "category, using 'Miscellaneous' if nothing else fits."
+            "Do NOT add new categories. Assign every file to the most "
+            "appropriate existing category."
         )
 
     messages = [
@@ -351,11 +367,13 @@ def _build_warm_messages(
 
 # ── Batching ────────────────────────────────────────────────────────────────
 
-_BATCH_SIZE = 40  # max files per LLM call
+_COLD_BATCH_SIZE = 80   # cold start: no previews → more files per batch
+_WARM_BATCH_SIZE = 25   # warm runs: with previews → fewer files per batch
 
 
 def _batch_profiles(
     profiles: list[FileProfile],
+    batch_size: int,
 ) -> list[list[FileProfile]]:
     """Split profiles into batches, grouping similar files together.
 
@@ -365,15 +383,15 @@ def _batch_profiles(
     same batch, the model distinguishes them better than if they were
     scattered across batches mixed with images and code.
     """
-    if len(profiles) <= _BATCH_SIZE:
+    if len(profiles) <= batch_size:
         return [profiles]
 
     # Sort by extension so similar files are grouped in the same batch
     sorted_profiles = sorted(profiles, key=lambda p: (p.extension, p.name))
 
     return [
-        sorted_profiles[i : i + _BATCH_SIZE]
-        for i in range(0, len(sorted_profiles), _BATCH_SIZE)
+        sorted_profiles[i : i + batch_size]
+        for i in range(0, len(sorted_profiles), batch_size)
     ]
 
 
@@ -704,7 +722,8 @@ def categorize(
     all_assignments: dict[str, str] = {}
     latest_taxonomy: dict[str, Any] = existing_taxonomy or {}
 
-    batches = _batch_profiles(unique_profiles)
+    batch_size = _COLD_BATCH_SIZE if is_cold else _WARM_BATCH_SIZE
+    batches = _batch_profiles(unique_profiles, batch_size)
     batch_errors = 0
 
     for i, batch in enumerate(batches):
